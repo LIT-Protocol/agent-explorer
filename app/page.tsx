@@ -6,6 +6,7 @@ import bs58 from "bs58";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+// import WalletConnect from "@/components/ui/login";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Shield, AlertTriangle, Flame } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -26,29 +27,30 @@ import {
     PKP_TOOL_POLICY_REGISTRY_ABI,
     PKP_NFT_ABI,
 } from "./config";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 interface AgentDetails {
-    admin: string;
-    policies: {
-        toolName: string;
-        ipfsCid: string;
-        delegatees: string[];
-        encodedPolicy: string;
-    }[];
-    permittedActions: string[];
+  admin: string;
+  policies: {
+      toolName: string;
+      ipfsCid: string;
+      delegatees: string[];
+      encodedPolicy: string;
+  }[];
+  permittedActions: string[];
 }
 
-const NetworkSelector = ({ 
-    value, 
-    onValueChange 
-}: { 
+const NetworkSelector = ({
+    value,
+    onValueChange,
+}: {
     value: string;
     onValueChange: (value: string) => void;
 }) => {
     const networks = [
         { id: "datil-dev", name: "DatilDev" },
         { id: "datil-test", name: "DatilTest" },
-        { id: "datil", name: "Datil" }
+        { id: "datil", name: "Datil" },
     ];
 
     return (
@@ -59,8 +61,8 @@ const NetworkSelector = ({
             <SelectContent>
                 <SelectGroup>
                     {networks.map((network) => (
-                        <SelectItem 
-                            key={network.id} 
+                        <SelectItem
+                            key={network.id}
                             value={network.id}
                             className="flex items-center gap-2"
                         >
@@ -154,9 +156,7 @@ const AgentSecurityChecker = () => {
 
             const networkConfig = getNetworkConfig(network);
 
-            const provider = new ethers.providers.JsonRpcProvider(
-                PROVIDER_URL
-            );
+            const provider = new ethers.providers.JsonRpcProvider(PROVIDER_URL);
 
             const pubkeyRouterContract = new ethers.Contract(
                 networkConfig.PUBKEY_ROUTER,
@@ -246,15 +246,19 @@ const AgentSecurityChecker = () => {
     return (
         <div className="max-w-4xl mx-auto p-6">
             <div className="relative mb-8">
-                <div className="absolute right-0 top-0">
-                    <NetworkSelector 
-                        value={network}
-                        onValueChange={setNetwork}
-                    />
+                <div className="flex justify-between items-center mb-4">
+                    <h1 className="text-3xl font-bold">
+                        Agent Security Checker
+                    </h1>
+                    <div className="flex items-center gap-4">
+                        <NetworkSelector
+                            value={network}
+                            onValueChange={setNetwork}
+                        />
+                        <ConnectButton accountStatus="address" chainStatus="icon" showBalance={false}/>
+                        {/* <WalletConnect /> */}
+                    </div>
                 </div>
-                <h1 className="text-3xl font-bold mb-4">
-                    Agent Security Checker
-                </h1>
                 <p className="text-gray-600 mb-6">
                     Verify the security configuration and policies of any agent
                     by entering their wallet address.
