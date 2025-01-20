@@ -7,9 +7,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Shield, AlertTriangle } from "lucide-react";
+import { Shield, AlertTriangle, Flame } from "lucide-react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import {
+    Select,
+    SelectContent,
+    SelectGroup,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import {
     getNetworkConfig,
     PROVIDER_URL,
@@ -30,7 +38,51 @@ interface AgentDetails {
     permittedActions: string[];
 }
 
+const NetworkSelector = ({ 
+    value, 
+    onValueChange 
+}: { 
+    value: string;
+    onValueChange: (value: string) => void;
+}) => {
+    const networks = [
+        { id: "datil-dev", name: "DatilDev" },
+        { id: "datil-test", name: "DatilTest" },
+        { id: "datil", name: "Datil" }
+    ];
+
+    return (
+        <Select value={value} onValueChange={onValueChange}>
+            <SelectTrigger className="w-32">
+                <SelectValue placeholder="Select network" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectGroup>
+                    {networks.map((network) => (
+                        <SelectItem 
+                            key={network.id} 
+                            value={network.id}
+                            className="flex items-center gap-2"
+                        >
+                            <div className="flex items-center gap-2">
+                                <Flame className="h-4 w-4" />
+                                <span>{network.name}</span>
+                            </div>
+                        </SelectItem>
+                    ))}
+                </SelectGroup>
+            </SelectContent>
+        </Select>
+    );
+};
+
 const AgentSecurityChecker = () => {
+    const [network, setNetwork] = useState(() => {
+        if (typeof window !== "undefined") {
+            return localStorage.getItem("selectedNetwork") || "datil-dev";
+        }
+        return "datil-dev";
+    });
     const [walletAddress, setWalletAddress] = useState(() => {
         if (typeof window !== "undefined") {
             return localStorage.getItem("lastWalletAddress") || "";
@@ -77,6 +129,12 @@ const AgentSecurityChecker = () => {
         }
     }, [error]);
 
+    useEffect(() => {
+        if (network) {
+            localStorage.setItem("selectedNetwork", network);
+        }
+    }, [network]);
+
     if (!mounted) {
         return null;
     }
@@ -94,10 +152,10 @@ const AgentSecurityChecker = () => {
             setAgentDetails(null);
             setError("");
 
-            const networkConfig = getNetworkConfig("datil");
+            const networkConfig = getNetworkConfig(network);
 
             const provider = new ethers.providers.JsonRpcProvider(
-              PROVIDER_URL
+                PROVIDER_URL
             );
 
             const pubkeyRouterContract = new ethers.Contract(
@@ -187,7 +245,13 @@ const AgentSecurityChecker = () => {
 
     return (
         <div className="max-w-4xl mx-auto p-6">
-            <div className="mb-8">
+            <div className="relative mb-8">
+                <div className="absolute right-0 top-0">
+                    <NetworkSelector 
+                        value={network}
+                        onValueChange={setNetwork}
+                    />
+                </div>
                 <h1 className="text-3xl font-bold mb-4">
                     Agent Security Checker
                 </h1>
