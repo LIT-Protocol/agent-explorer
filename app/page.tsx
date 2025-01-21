@@ -30,14 +30,18 @@ import {
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 interface AgentDetails {
-  admin: string;
-  policies: {
-      toolName: string;
-      ipfsCid: string;
-      delegatees: string[];
-      encodedPolicy: string;
-  }[];
-  permittedActions: string[];
+    admin: string;
+    policies: {
+        toolName: string;
+        ipfsCid: string;
+        delegatees: string[];
+        encodedPolicy: string;
+        decodedPolicy?: {
+            decodedPolicy: Record<string, string | number | boolean>;
+            version: string;
+        };
+    }[];
+    permittedActions: string[];
 }
 
 const NetworkSelector = ({
@@ -141,14 +145,16 @@ const AgentSecurityChecker = () => {
         return null;
     }
 
-    const bytesToString = async (_bytes: string) => {
-        const hexString = _bytes.startsWith("0x") ? _bytes.slice(2) : _bytes;
-        const buffer = Buffer.from(hexString, "hex");
-        const string = bs58.encode(buffer);
-        return string;
-    };
-
     const fetchAgentDetails = async () => {
+        const bytesToString = async (_bytes: string) => {
+            const hexString = _bytes.startsWith("0x")
+                ? _bytes.slice(2)
+                : _bytes;
+            const buffer = Buffer.from(hexString, "hex");
+            const string = bs58.encode(buffer);
+            return string;
+        };
+
         try {
             setIsLoading(true);
             setAgentDetails(null);
@@ -198,25 +204,49 @@ const AgentSecurityChecker = () => {
                 authMethods.map((method: string) => bytesToString(method))
             );
 
-            const policies = await Promise.all(
-                registeredTools.ipfsCids.map(
-                    async (cid: string, index: number) => {
-                        const toolPolicy =
-                            await policyRegistryContract.getToolPolicy(
-                                pkpId,
-                                cid
-                            );
+            function decodePolicy(encodedPolicy: string) {
+                try {
+                    const abiCoder = new ethers.utils.AbiCoder();
+                    
+                    // Decode based on the policy format from the contract
+                    const decodedData = abiCoder.decode(
+                        ['uint256', 'address', 'bool'],
+                        ethers.utils.arrayify(encodedPolicy)
+                    );
 
-                        return {
-                            toolName: `Tool ${index + 1}`,
-                            ipfsCid: cid,
-                            delegatees: delegatees,
-                            encodedPolicy: ethers.utils.hexlify(
-                                toolPolicy.policy
-                            ),
-                        };
-                    }
-                )
+                    return {
+                        maxAmount: decodedData[0].toString(),
+                        tokenAddress: decodedData[1],
+                        isEnabled: decodedData[2]
+                    };
+                } catch (error) {
+                    console.error('Error decoding policy:', error);
+                    return null;
+                }
+            }
+            
+
+            const policies = await Promise.all(
+                registeredTools.ipfsCids.map(async (cid: string, index: number) => {
+                    const toolPolicy = await policyRegistryContract.getToolPolicy(
+                        pkpId,
+                        cid
+                    );
+
+                    const encodedPolicy = ethers.utils.hexlify(toolPolicy.policy);
+                    const decodedPolicy = decodePolicy(toolPolicy.policy);
+
+                    return {
+                        toolName: `Tool ${index + 1}`,
+                        ipfsCid: cid,
+                        delegatees: delegatees,
+                        encodedPolicy,
+                        decodedPolicy: {
+                            decodedPolicy,
+                            version: toolPolicy.version
+                        }
+                    };
+                })
             );
 
             const contractPKPNFT = new ethers.Contract(
@@ -255,7 +285,11 @@ const AgentSecurityChecker = () => {
                             value={network}
                             onValueChange={setNetwork}
                         />
-                        <ConnectButton accountStatus="address" chainStatus="icon" showBalance={false}/>
+                        <ConnectButton
+                            accountStatus="address"
+                            chainStatus="icon"
+                            showBalance={false}
+                        />
                         {/* <WalletConnect /> */}
                     </div>
                 </div>
@@ -387,6 +421,30 @@ const AgentSecurityChecker = () => {
                                                 <code className="block bg-gray-50 p-2 rounded text-sm break-all">
                                                     {policy.encodedPolicy}
                                                 </code>
+                                            </div>
+
+                                            <div>
+                                                <label className="text-sm text-gray-600 block mb-1">
+                                                    Decoded Policy:
+                                                </label>
+                                                <div className="bg-gray-50 p-2 rounded text-sm break-all font-mono">
+                                                    {policy.decodedPolicy?.decodedPolicy ? (
+                                                        <>
+                                                            <div>Max Amount: {policy.decodedPolicy.decodedPolicy.maxAmount}</div>
+                                                            <div>Token Address: {
+                                                                policy.decodedPolicy.decodedPolicy.tokenAddress === "0x0000000000000000000000000000000000000000" 
+                                                                    ? "No token address specified" 
+                                                                    : policy.decodedPolicy.decodedPolicy.tokenAddress
+                                                            }</div>
+                                                            <div>Is Enabled: {policy.decodedPolicy.decodedPolicy.isEnabled.toString()}</div>
+                                                            <div className="mt-2 text-gray-500">
+                                                                Version: {policy.decodedPolicy.version}
+                                                            </div>
+                                                        </>
+                                                    ) : (
+                                                        <p className="text-gray-500">No decoded policy available</p>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>

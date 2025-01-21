@@ -55,6 +55,19 @@ export const PKP_TOOL_POLICY_REGISTRY_ABI = [
         stateMutability: "view",
         type: "function",
     },
+    {
+        inputs: [
+            { internalType: "uint256", name: "pkpTokenId", type: "uint256" },
+            { internalType: "string", name: "ipfsCid", type: "string" }
+        ],
+        name: "getPolicyMetadata",
+        outputs: [
+            { internalType: "string", name: "abi", type: "string" },
+            { internalType: "string", name: "version", type: "string" }
+        ],
+        stateMutability: "view",
+        type: "function"
+    }
 ];
 
 export const PKP_NFT_ABI = [
