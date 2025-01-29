@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-"use client";
 /* eslint-disable @typescript-eslint/no-unused-vars */
+"use client";
 import React, { useState, useEffect } from "react";
 import { providers } from "ethers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,13 +29,6 @@ interface AgentDetails {
     delegatees: string[];
     toolsWithPolicies: Record<string, ToolData>;
     allTools: string[];
-}
-
-interface ToolInfo {
-    toolIpfsCid: string;
-    delegatees: string[];
-    delegateesPolicyIpfsCids: string[];
-    delegateesPolicyEnabled: boolean[];
 }
 
 interface ToolData {
