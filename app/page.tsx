@@ -1,8 +1,9 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useState, useEffect } from "react";
-import { ethers } from "ethers";
-import bs58 from "bs58";
+import { providers } from "ethers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,29 +20,27 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import {
-    getNetworkConfig,
-    PROVIDER_URL,
-    PKP_PERMISSIONS_ABI,
-    PUBKEY_ROUTER_ABI,
-    PKP_TOOL_POLICY_REGISTRY_ABI,
-    PKP_NFT_ABI,
-} from "./config";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { useAccount, useWalletClient } from "wagmi";
+import { Admin, type LitNetwork } from "@lit-protocol/agent-wallet";
 
 interface AgentDetails {
-    admin: string;
-    policies: {
-        toolName: string;
-        ipfsCid: string;
-        delegatees: string[];
-        encodedPolicy: string;
-        decodedPolicy?: {
-            decodedPolicy: Record<string, string | number | boolean>;
-            version: string;
-        };
-    }[];
-    permittedActions: string[];
+    owner: string;
+    delegatees: string[];
+    toolsWithPolicies: Record<string, ToolData>;
+    allTools: string[];
+}
+
+interface ToolInfo {
+    toolIpfsCid: string;
+    delegatees: string[];
+    delegateesPolicyIpfsCids: string[];
+    delegateesPolicyEnabled: boolean[];
+}
+
+interface ToolData {
+    toolEnabled: boolean;
+    delegateePolicies: Record<string, { policyEnabled: boolean }>;
 }
 
 const NetworkSelector = ({
@@ -83,6 +82,16 @@ const NetworkSelector = ({
 };
 
 const AgentSecurityChecker = () => {
+    const { address } = useAccount();
+    const { data: walletClient } = useWalletClient();
+    const signer = React.useMemo(
+        () =>
+            walletClient
+                ? new providers.Web3Provider(walletClient as any).getSigner()
+                : undefined,
+        [walletClient]
+    );
+
     const [network, setNetwork] = useState(() => {
         if (typeof window !== "undefined") {
             return localStorage.getItem("selectedNetwork") || "datil-dev";
@@ -146,45 +155,36 @@ const AgentSecurityChecker = () => {
     }
 
     const fetchAgentDetails = async () => {
-        const bytesToString = async (_bytes: string) => {
-            const hexString = _bytes.startsWith("0x")
-                ? _bytes.slice(2)
-                : _bytes;
-            const buffer = Buffer.from(hexString, "hex");
-            const string = bs58.encode(buffer);
-            return string;
-        };
+        console.log("fetching agent details...");
+
+        setIsLoading(true);
+        setAgentDetails(null);
+        setError("");
 
         try {
-            setIsLoading(true);
-            setAgentDetails(null);
-            setError("");
-
-            const networkConfig = getNetworkConfig(network);
-
-            const provider = new ethers.providers.JsonRpcProvider(PROVIDER_URL);
-
-            const pubkeyRouterContract = new ethers.Contract(
-                networkConfig.PUBKEY_ROUTER,
-                PUBKEY_ROUTER_ABI,
-                provider
+            const sdk = await Admin.create(
+                {
+                    type: "eoa",
+                    privateKey:
+                        "d653763be1854048e1a70dd9fc94d47c09c790fb1530a01ee65257b0b698c352",
+                },
+                {
+                    // @ts-ignore
+                    litNetwork: network,
+                    storage: {
+                        prefix: "lit-agent-wallet", // prefix for keys in localStorage
+                        ephemeral: false, // persist data between page reloads
+                    },
+                }
             );
 
-            const policyRegistryContract = new ethers.Contract(
-                networkConfig.PKP_TOOL_POLICY_REGISTRY,
-                PKP_TOOL_POLICY_REGISTRY_ABI,
-                provider
-            );
+            if (!signer || !address) {
+                setError("Please connect your wallet first");
+                return;
+            }
 
-            const pkpPermissionsContract = new ethers.Contract(
-                networkConfig.PKP_PERMISSIONS,
-                PKP_PERMISSIONS_ABI,
-                provider
-            );
-
-            const pkpId = await pubkeyRouterContract.ethAddressToPkpId(
-                walletAddress
-            );
+            const pkpId = await sdk.getTokenIdByPkpEthAddress(walletAddress);
+            console.log("pkpId", pkpId);
 
             if (pkpId.isZero()) {
                 throw new Error(
@@ -192,74 +192,73 @@ const AgentSecurityChecker = () => {
                 );
             }
 
-            const registeredTools =
-                await policyRegistryContract.getRegisteredTools(pkpId);
-            const delegatees = await policyRegistryContract.getDelegatees(
-                pkpId
-            );
+            const allToolsInfo =
+                await sdk.getRegisteredToolsAndDelegateesForPkp(pkpId);
+            console.log("getRegisteredToolsAndDelegateesForPkp", allToolsInfo);
 
-            const authMethods =
-                await pkpPermissionsContract.getPermittedActions(pkpId);
-            const permittedActions = await Promise.all(
-                authMethods.map((method: string) => bytesToString(method))
-            );
+            const delegatees = await sdk.getDelegatees(pkpId);
+            console.log("delegatees", delegatees);
 
-            function decodePolicy(encodedPolicy: string) {
-                try {
-                    const abiCoder = new ethers.utils.AbiCoder();
-                    
-                    // Decode based on the policy format from the contract
-                    const decodedData = abiCoder.decode(
-                        ['uint256', 'address', 'bool'],
-                        ethers.utils.arrayify(encodedPolicy)
-                    );
+            const permittedActions = await sdk.getPermittedActions(pkpId);
+            console.log("permittedActions", permittedActions);
 
-                    return {
-                        maxAmount: decodedData[0].toString(),
-                        tokenAddress: decodedData[1],
-                        isEnabled: decodedData[2]
-                    };
-                } catch (error) {
-                    console.error('Error decoding policy:', error);
-                    return null;
-                }
+            function findToolsWithPolicies(data: any) {
+                const toolsWithPolicies = {
+                    ...data.toolsWithPolicies,
+                    ...data.toolsUnknownWithPolicies,
+                };
+                return toolsWithPolicies;
             }
-            
 
-            const policies = await Promise.all(
-                registeredTools.ipfsCids.map(async (cid: string, index: number) => {
-                    const toolPolicy = await policyRegistryContract.getToolPolicy(
-                        pkpId,
-                        cid
-                    );
+            function findAllTools(data: any) {
+                const allTools = new Set([
+                    ...Object.keys(data.toolsWithPolicies),
+                    ...Object.keys(data.toolsWithoutPolicies),
+                    ...Object.keys(data.toolsUnknownWithPolicies),
+                    ...data.toolsUnknownWithoutPolicies,
+                ]);
+                return [...allTools];
+            }
 
-                    const encodedPolicy = ethers.utils.hexlify(toolPolicy.policy);
-                    const decodedPolicy = decodePolicy(toolPolicy.policy);
+            function showEnabledPolicies(data: any) {
+                const enabledPolicies: any = {};
 
-                    return {
-                        toolName: `Tool ${index + 1}`,
-                        ipfsCid: cid,
-                        delegatees: delegatees,
-                        encodedPolicy,
-                        decodedPolicy: {
-                            decodedPolicy,
-                            version: toolPolicy.version
+                for (const [toolId, toolData] of Object.entries(
+                    data.toolsUnknownWithPolicies as Record<string, ToolData>
+                )) {
+                    if (toolData.toolEnabled) {
+                        const enabledDelegatees = Object.entries(
+                            toolData.delegateePolicies
+                        )
+                            .filter(([_, policy]) => policy.policyEnabled)
+                            .map(([delegatee]) => delegatee);
+
+                        if (enabledDelegatees.length > 0) {
+                            enabledPolicies[toolId] = {
+                                enabledDelegatees,
+                                policies: toolData.delegateePolicies,
+                            };
                         }
-                    };
-                })
-            );
+                    }
+                }
+                return enabledPolicies;
+            }
 
-            const contractPKPNFT = new ethers.Contract(
-                networkConfig.PKP_NFT,
-                PKP_NFT_ABI,
-                provider
-            );
-            const admin = await contractPKPNFT.ownerOf(pkpId);
+            // Execute the functions
+            const toolsWithPolicies = findToolsWithPolicies(allToolsInfo);
+            const allTools = findAllTools(allToolsInfo);
+            const enabledPolicies = showEnabledPolicies(allToolsInfo);
+            console.log("enabledPolicies", enabledPolicies);
+            console.log("allTools", allTools);
+            console.log("toolsWithPolicies", toolsWithPolicies);
 
+            const owner = await sdk.getPKPOwner(pkpId);
+            console.log("owner", owner);
             setAgentDetails({
-                admin,
-                policies,
-                permittedActions,
+                owner,
+                delegatees,
+                toolsWithPolicies,
+                allTools,
             });
         } catch (err) {
             console.error("Error fetching agent details:", err);
@@ -335,165 +334,151 @@ const AgentSecurityChecker = () => {
 
                     <Card>
                         <CardHeader>
-                            <CardTitle>Admin Details</CardTitle>
+                            <CardTitle>Owner Details</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="font-mono bg-gray-50 p-4 rounded-md break-all">
-                                {agentDetails.admin}
+                                {agentDetails?.owner || "No owner found"}
                             </div>
                         </CardContent>
                     </Card>
 
                     <Card>
                         <CardHeader>
-                            <CardTitle>Registered Tools & Policies</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="space-y-6">
-                                {agentDetails.policies.map((policy, index) => (
-                                    <div
-                                        key={index}
-                                        className="border rounded-lg p-4"
-                                    >
-                                        <h3 className="font-semibold mb-3">
-                                            {policy.toolName}
-                                        </h3>
-
-                                        <div className="space-y-3">
-                                            <div>
-                                                <label className="text-sm text-gray-600 block mb-1">
-                                                    IPFS CID:
-                                                </label>
-                                                <button
-                                                    onClick={() =>
-                                                        router.push(
-                                                            `/ipfs/${policy.ipfsCid}`
-                                                        )
-                                                    }
-                                                    className="block bg-gray-50 p-2 rounded text-sm break-all w-full text-left font-mono flex justify-between items-center"
-                                                >
-                                                    {policy.ipfsCid}
-                                                    <span className="ml-2">
-                                                        →
-                                                    </span>
-                                                </button>
-                                            </div>
-
-                                            <div>
-                                                <label className="text-sm text-gray-600 block mb-1">
-                                                    Delegatees:
-                                                </label>
-                                                <div className="bg-gray-50 p-2 rounded">
-                                                    {policy.delegatees.length >
-                                                    0 ? (
-                                                        <ul className="list-disc list-inside space-y-1">
-                                                            {policy.delegatees.map(
-                                                                (
-                                                                    delegatee,
-                                                                    idx
-                                                                ) => (
-                                                                    <li
-                                                                        key={
-                                                                            idx
-                                                                        }
-                                                                        className="font-mono text-sm break-all"
-                                                                    >
-                                                                        {
-                                                                            delegatee
-                                                                        }
-                                                                    </li>
-                                                                )
-                                                            )}
-                                                        </ul>
-                                                    ) : (
-                                                        <p className="text-gray-500 text-sm">
-                                                            No delegatees
-                                                            specified
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div>
-                                                <label className="text-sm text-gray-600 block mb-1">
-                                                    Encoded Policy:
-                                                </label>
-                                                <code className="block bg-gray-50 p-2 rounded text-sm break-all">
-                                                    {policy.encodedPolicy}
-                                                </code>
-                                            </div>
-
-                                            <div>
-                                                <label className="text-sm text-gray-600 block mb-1">
-                                                    Decoded Policy:
-                                                </label>
-                                                <div className="bg-gray-50 p-2 rounded text-sm break-all font-mono">
-                                                    {policy.decodedPolicy?.decodedPolicy ? (
-                                                        <>
-                                                            <div>Max Amount: {policy.decodedPolicy.decodedPolicy.maxAmount}</div>
-                                                            <div>Token Address: {
-                                                                policy.decodedPolicy.decodedPolicy.tokenAddress === "0x0000000000000000000000000000000000000000" 
-                                                                    ? "No token address specified" 
-                                                                    : policy.decodedPolicy.decodedPolicy.tokenAddress
-                                                            }</div>
-                                                            <div>Is Enabled: {policy.decodedPolicy.decodedPolicy.isEnabled.toString()}</div>
-                                                            <div className="mt-2 text-gray-500">
-                                                                Version: {policy.decodedPolicy.version}
-                                                            </div>
-                                                        </>
-                                                    ) : (
-                                                        <p className="text-gray-500">No decoded policy available</p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-
-                                {agentDetails.policies.length === 0 && (
-                                    <p className="text-gray-500 text-center py-4">
-                                        No tools or policies registered for this
-                                        agent.
-                                    </p>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Permitted Actions</CardTitle>
+                            <CardTitle>Delegatees</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-3">
-                                {agentDetails.permittedActions.length > 0 ? (
-                                    <ul className="list-disc list-inside space-y-2">
-                                        {agentDetails.permittedActions.map(
-                                            (action, idx) => (
-                                                <div key={idx}>
-                                                    <button
-                                                        className="font-mono text-sm break-all bg-gray-50 p-2 rounded w-full text-left flex justify-between items-center"
-                                                        onClick={() =>
-                                                            router.push(
-                                                                `/ipfs/${action}`
-                                                            )
-                                                        }
-                                                    >
-                                                        {action}
-                                                        <span className="ml-2">
-                                                            →
-                                                        </span>
-                                                    </button>
-                                                </div>
+                                {agentDetails?.delegatees?.length > 0 ? (
+                                    <ul className="list-disc list-inside space-y-1">
+                                        {agentDetails.delegatees.map(
+                                            (delegatee, idx) => (
+                                                <li
+                                                    key={idx}
+                                                    className="font-mono text-sm break-all"
+                                                >
+                                                    {delegatee}
+                                                </li>
                                             )
                                         )}
                                     </ul>
                                 ) : (
-                                    <p className="text-gray-500 text-center py-4">
-                                        No permitted actions found for this
-                                        agent.
+                                    <p className="text-gray-500 text-sm">
+                                        No delegatees found
                                     </p>
                                 )}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Registered Tools</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-3">
+                                {agentDetails?.allTools?.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {agentDetails.allTools.map(
+                                            (tool, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    className="font-mono text-sm break-all bg-gray-50 p-2 rounded w-full text-left flex justify-between items-center"
+                                                    onClick={() =>
+                                                        router.push(
+                                                            `/ipfs/${tool}`
+                                                        )
+                                                    }
+                                                >
+                                                    {tool}
+                                                    <span className="ml-2">
+                                                        →
+                                                    </span>
+                                                </button>
+                                            )
+                                        )}
+                                    </div>
+                                ) : (
+                                    <p className="text-gray-500 text-sm">
+                                        No tools found
+                                    </p>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Tools & Policies</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-6">
+                                {agentDetails?.toolsWithPolicies &&
+                                    Object.entries(
+                                        agentDetails.toolsWithPolicies
+                                    ).map(
+                                        ([
+                                            toolId,
+                                            toolData,
+                                        ]): React.ReactElement => (
+                                            <div
+                                                key={toolId}
+                                                className="border rounded-lg p-4"
+                                            >
+                                                <label className="text-sm text-gray-600 block mb-1">
+                                                    IPFS CID:
+                                                </label>
+                                                <button
+                                                    className="font-mono text-sm break-all bg-gray-50 p-2 rounded w-full text-left flex justify-between items-center mb-3"
+                                                    onClick={() =>
+                                                        router.push(
+                                                            `/ipfs/${toolId}`
+                                                        )
+                                                    }
+                                                >
+                                                    {toolId}
+                                                    <span className="ml-2">
+                                                        →
+                                                    </span>
+                                                </button>
+                                                <div className="space-y-3">
+                                                    <div>
+                                                        <label className="text-sm text-gray-600 block mb-1">
+                                                            Tool Enabled:
+                                                        </label>
+                                                        <div className="bg-gray-50 p-2 rounded">
+                                                            {toolData?.toolEnabled
+                                                                ? "Yes"
+                                                                : "No"}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-sm text-gray-600 block mb-1">
+                                                            Delegatee Policies:
+                                                        </label>
+                                                        <div className="bg-gray-50 p-2 rounded">
+                                                            {toolData?.delegateePolicies &&
+                                                                Object.entries(
+                                                                    toolData.delegateePolicies
+                                                                ).map(
+                                                                    ([
+                                                                        delegatee,
+                                                                        policy,
+                                                                    ]) => (
+                                                                        <div
+                                                                            key={delegatee}
+                                                                            className="py-1 font-mono text-sm"
+                                                                        >
+                                                                            {delegatee}: {policy?.policyEnabled ? "Enabled" : "Disabled"}
+                                                                        </div>
+                                                                    )
+                                                                )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    )}
                             </div>
                         </CardContent>
                     </Card>
