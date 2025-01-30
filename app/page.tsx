@@ -34,6 +34,7 @@ interface AgentDetails {
 interface ToolData {
     toolEnabled: boolean;
     delegateePolicies: Record<string, { policyEnabled: boolean }>;
+    policyIpfsCid?: string;
 }
 
 const NetworkSelector = ({
@@ -187,13 +188,10 @@ const AgentSecurityChecker = () => {
 
             const allToolsInfo =
                 await sdk.getRegisteredToolsAndDelegateesForPkp(pkpId);
-            console.log("getRegisteredToolsAndDelegateesForPkp", allToolsInfo);
+            // console.log("getRegisteredToolsAndDelegateesForPkp", allToolsInfo);
 
             const delegatees = await sdk.getDelegatees(pkpId);
-            console.log("delegatees", delegatees);
-
-            const permittedActions = await sdk.getPermittedActions(pkpId);
-            console.log("permittedActions", permittedActions);
+            // console.log("delegatees", delegatees);
 
             function findToolsWithPolicies(data: any) {
                 const toolsWithPolicies = {
@@ -265,13 +263,26 @@ const AgentSecurityChecker = () => {
         }
     };
 
+    function extractPolicyIpfsCids(data: any) {
+        let policyIpfsCids;
+        
+        if (data.delegateePolicies) {
+            Object.entries(data.delegateePolicies).forEach(
+                ([, policy]: [string, any]) => {
+                    if (policy.policyIpfsCid) {
+                        policyIpfsCids = policy.policyIpfsCid;
+                    }
+                }
+            );
+        }
+        return policyIpfsCids;
+    }
+
     return (
         <div className="max-w-4xl mx-auto p-6">
             <div className="relative mb-8">
                 <div className="flex justify-between items-center mb-4">
-                    <h1 className="text-3xl font-bold">
-                        Agent Security Checker
-                    </h1>
+                    <h1 className="text-3xl font-bold">Agent Explorer</h1>
                     <div className="flex items-center gap-4">
                         <NetworkSelector
                             value={network}
@@ -459,13 +470,63 @@ const AgentSecurityChecker = () => {
                                                                         policy,
                                                                     ]) => (
                                                                         <div
-                                                                            key={delegatee}
+                                                                            key={
+                                                                                delegatee
+                                                                            }
                                                                             className="py-1 font-mono text-sm"
                                                                         >
-                                                                            {delegatee}: {policy?.policyEnabled ? "Enabled" : "Disabled"}
+                                                                            {
+                                                                                delegatee
+                                                                            }
+                                                                            :{" "}
+                                                                            {policy?.policyEnabled
+                                                                                ? "Enabled"
+                                                                                : "Disabled"}
                                                                         </div>
                                                                     )
                                                                 )}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <div>
+                                                            <label className="text-sm text-gray-600 block mb-1">
+                                                                Policy IPFS CID:
+                                                            </label>
+                                                            <button
+                                                                className="font-mono text-sm break-all bg-gray-50 p-2 rounded w-full text-left flex justify-between items-center"
+                                                                onClick={() => {
+                                                                    const ipfsCid =
+                                                                        extractPolicyIpfsCids(
+                                                                            toolData
+                                                                        );
+                                                                    if (
+                                                                        ipfsCid
+                                                                    ) {
+                                                                        router.push(
+                                                                            `/ipfs/${ipfsCid}`
+                                                                        );
+                                                                    }
+                                                                }}
+                                                                disabled={
+                                                                    !extractPolicyIpfsCids(
+                                                                        toolData
+                                                                    )
+                                                                }
+                                                            >
+                                                                <span>
+                                                                    {extractPolicyIpfsCids(
+                                                                        toolData
+                                                                    ) ||
+                                                                        "No policy ID found"}
+                                                                </span>
+                                                                {extractPolicyIpfsCids(
+                                                                    toolData
+                                                                ) && (
+                                                                    <span className="ml-2">
+                                                                        →
+                                                                    </span>
+                                                                )}
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 </div>
