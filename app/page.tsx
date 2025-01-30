@@ -7,11 +7,9 @@ import { providers } from "ethers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-// import WalletConnect from "@/components/ui/login";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Shield, AlertTriangle, Flame } from "lucide-react";
-import { useRouter } from "next/navigation";
-import dynamic from "next/dynamic";
+import { useRouter, usePathname } from "next/navigation";
 import {
     Select,
     SelectContent,
@@ -20,9 +18,10 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount, useWalletClient } from "wagmi";
-import { Admin, type LitNetwork } from "@lit-protocol/agent-wallet";
+import { Admin } from "@lit-protocol/agent-wallet";
+import Link from "next/link";
+import { Header } from "@/app/components/Header";
 
 interface AgentDetails {
     owner: string;
@@ -75,7 +74,35 @@ const NetworkSelector = ({
     );
 };
 
-const AgentSecurityChecker = () => {
+const NavButton = ({
+    href,
+    active,
+    children,
+}: {
+    href: string;
+    active: boolean;
+    children: React.ReactNode;
+}) => (
+    <Link
+        href={href}
+        className={`px-6 py-2 rounded-lg text-lg ${
+            active
+                ? "bg-black text-white"
+                : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+        }`}
+    >
+        {children}
+    </Link>
+);
+
+const QueryPage = () => {
+    const [network, setNetwork] = useState(() => {
+        if (typeof window !== "undefined") {
+            return localStorage.getItem("selectedNetwork") || "datil-dev";
+        }
+        return "datil-dev";
+    });
+
     const { address } = useAccount();
     const { data: walletClient } = useWalletClient();
     const signer = React.useMemo(
@@ -86,12 +113,6 @@ const AgentSecurityChecker = () => {
         [walletClient]
     );
 
-    const [network, setNetwork] = useState(() => {
-        if (typeof window !== "undefined") {
-            return localStorage.getItem("selectedNetwork") || "datil-dev";
-        }
-        return "datil-dev";
-    });
     const [walletAddress, setWalletAddress] = useState(() => {
         if (typeof window !== "undefined") {
             return localStorage.getItem("lastWalletAddress") || "";
@@ -112,6 +133,7 @@ const AgentSecurityChecker = () => {
     const [mounted, setMounted] = useState(false);
 
     const router = useRouter();
+    const pathname = usePathname();
 
     useEffect(() => {
         setMounted(true);
@@ -265,7 +287,7 @@ const AgentSecurityChecker = () => {
 
     function extractPolicyIpfsCids(data: any) {
         let policyIpfsCids;
-        
+
         if (data.delegateePolicies) {
             Object.entries(data.delegateePolicies).forEach(
                 ([, policy]: [string, any]) => {
@@ -280,40 +302,31 @@ const AgentSecurityChecker = () => {
 
     return (
         <div className="max-w-4xl mx-auto p-6">
-            <div className="relative mb-8">
-                <div className="flex justify-between items-center mb-4">
-                    <h1 className="text-3xl font-bold">Agent Explorer</h1>
-                    <div className="flex items-center gap-4">
-                        <NetworkSelector
-                            value={network}
-                            onValueChange={setNetwork}
+            <Header network={network} setNetwork={setNetwork} />
+            {pathname === "/" && (
+                <div>
+                    <p className="text-gray-600 mb-6">
+                        Verify the security configuration and policies of any
+                        agent by entering their wallet address.
+                    </p>
+
+                    <div className="flex gap-3 mb-4">
+                        <Input
+                            className="flex-1"
+                            type="text"
+                            value={walletAddress}
+                            onChange={(e) => setWalletAddress(e.target.value)}
+                            placeholder="Enter Agent's Wallet Address"
                         />
-                        <ConnectButton
-                            accountStatus="address"
-                            chainStatus="icon"
-                            showBalance={false}
-                        />
-                        {/* <WalletConnect /> */}
+                        <Button
+                            onClick={fetchAgentDetails}
+                            disabled={isLoading}
+                        >
+                            {isLoading ? "Checking..." : "Check Security"}
+                        </Button>
                     </div>
                 </div>
-                <p className="text-gray-600 mb-6">
-                    Verify the security configuration and policies of any agent
-                    by entering their wallet address.
-                </p>
-
-                <div className="flex gap-3 mb-4">
-                    <Input
-                        className="flex-1"
-                        type="text"
-                        value={walletAddress}
-                        onChange={(e) => setWalletAddress(e.target.value)}
-                        placeholder="Enter Agent's Wallet Address"
-                    />
-                    <Button onClick={fetchAgentDetails} disabled={isLoading}>
-                        {isLoading ? "Checking..." : "Check Security"}
-                    </Button>
-                </div>
-            </div>
+            )}
 
             {error && (
                 <Alert variant="destructive">
@@ -542,6 +555,8 @@ const AgentSecurityChecker = () => {
     );
 };
 
-export default dynamic(() => Promise.resolve(AgentSecurityChecker), {
-    ssr: false,
-});
+export default QueryPage;
+
+// export default dynamic(() => Promise.resolve(QueryPage), {
+//     ssr: false,
+// });

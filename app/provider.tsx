@@ -20,7 +20,7 @@ const customTheme: Theme = {
       actionButtonSecondaryBackground: '#7C3AED', // Slightly darker purple
       closeButton: '#FFFFFF',
       closeButtonBackground: 'rgba(0, 0, 0, 0.1)',
-      connectButtonBackground: '#7C3AED', // Main purple color from image
+      connectButtonBackground: '#000000', // Main purple color from image
       connectButtonBackgroundError: '#FF494A',
       connectButtonInnerBackground: '#7C3AED',
       connectButtonText: '#FFFFFF',
