@@ -74,27 +74,6 @@ const NetworkSelector = ({
     );
 };
 
-const NavButton = ({
-    href,
-    active,
-    children,
-}: {
-    href: string;
-    active: boolean;
-    children: React.ReactNode;
-}) => (
-    <Link
-        href={href}
-        className={`px-6 py-2 rounded-lg text-lg ${
-            active
-                ? "bg-black text-white"
-                : "bg-gray-100 text-gray-800 hover:bg-gray-200"
-        }`}
-    >
-        {children}
-    </Link>
-);
-
 const QueryPage = () => {
     const [network, setNetwork] = useState(() => {
         if (typeof window !== "undefined") {
