@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Shield, AlertTriangle, Plus, Minus } from "lucide-react";
 import { Admin, getToolByIpfsCid } from "@lit-protocol/agent-wallet";
-import { IPFS_CID_TO_ACTION_NAME } from "@/app/config";
+import { IPFS_CID_TO_ACTION_NAME } from "@/app/admin/config";
 import React from "react";
 
 export default function AdminPage() {
@@ -21,8 +21,22 @@ export default function AdminPage() {
         return "datil-dev";
     });
 
+    const [loadingStates, setLoadingStates] = useState<{
+        fetch: boolean;
+        mint: boolean;
+        addTool: boolean;
+        addDelegatee: boolean;
+        removeTool: Record<string, boolean>;
+        removeDelegatee: Record<string, boolean>;
+    }>({
+        fetch: false,
+        mint: false,
+        addTool: false,
+        addDelegatee: false,
+        removeTool: {},
+        removeDelegatee: {},
+    });
 
-    const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
 
@@ -57,12 +71,12 @@ export default function AdminPage() {
     const [toolsData, setToolsData] = useState<ToolsData | null>(null);
 
     const [toolNames, setToolNames] = useState<Record<string, string>>({});
-    
+
     useEffect(() => {
         const tools = getAllTools();
         tools.forEach((cid) => {
             if (toolNames[cid]) return;
-            
+
             if (
                 IPFS_CID_TO_ACTION_NAME[
                     cid as keyof typeof IPFS_CID_TO_ACTION_NAME
@@ -77,49 +91,32 @@ export default function AdminPage() {
                 return;
             }
         });
-    }, [toolsData]); 
-    
-    const getToolName = (cid: string) => {
-        return toolNames[cid] || cid;
-    };
+    }, [toolsData]);
 
-    const mintAgentWallet = async () => {
-        setIsLoading(true);
-        setError("");
-        setSuccess("");
-        try {
-            const sdk = await Admin.create(
-                {
-                    type: "eoa",
-                    privateKey:
-                        "d653763be1854048e1a70dd9fc94d47c09c790fb1530a01ee65257b0b698c352",
-                },
-                {
-                    // @ts-ignore
-                    litNetwork: network,
-                    storage: {
-                        prefix: "lit-agent-wallet",
-                        ephemeral: false,
+    const setLoading = (
+        operation: keyof typeof loadingStates,
+        isLoading: boolean,
+        itemId?: string
+    ) => {
+        setLoadingStates((prev) => {
+            if (
+                itemId &&
+                (operation === "removeTool" || operation === "removeDelegatee")
+            ) {
+                return {
+                    ...prev,
+                    [operation]: {
+                        ...prev[operation],
+                        [itemId]: isLoading,
                     },
-                }
-            );
-
-            const response = await sdk.mintPkp();
-            const pkp = response.info;
-            console.log(pkp);
-            setSuccess(
-                `Agent wallet minted successfully!\nPKP: ${pkp.ethAddress}`
-            );
-        } catch (err) {
-            setError("Failed to mint agent wallet");
-            console.error(err);
-        } finally {
-            setIsLoading(false);
-        }
+                };
+            }
+            return { ...prev, [operation]: isLoading };
+        });
     };
 
     const fetchAgentDetails = async () => {
-        setIsLoading(true);
+        setLoading("fetch", true);
         setError("");
         try {
             const sdk = await Admin.create(
@@ -154,12 +151,51 @@ export default function AdminPage() {
             setError("Failed to fetch agent details");
             console.error(err);
         } finally {
-            setIsLoading(false);
+            setLoading("fetch", false);
         }
     };
 
-    const removeTool = async (toolCid: string) => {
-        setIsLoading(true);
+    const getToolName = (cid: string) => {
+        return toolNames[cid] || cid;
+    };
+
+    const mintAgentWallet = async () => {
+        setLoading("mint", true);
+        setError("");
+        setSuccess("");
+        try {
+            const sdk = await Admin.create(
+                {
+                    type: "eoa",
+                    privateKey:
+                        "d653763be1854048e1a70dd9fc94d47c09c790fb1530a01ee65257b0b698c352",
+                },
+                {
+                    // @ts-ignore
+                    litNetwork: network,
+                    storage: {
+                        prefix: "lit-agent-wallet",
+                        ephemeral: false,
+                    },
+                }
+            );
+
+            const response = await sdk.mintPkp();
+            const pkp = response.info;
+            console.log(pkp);
+            setSuccess(
+                `Agent wallet minted successfully!\nPKP: ${pkp.ethAddress}`
+            );
+        } catch (err) {
+            setError("Failed to mint agent wallet");
+            console.error(err);
+        } finally {
+            setLoading("mint", false);
+        }
+    };
+
+    const addTool = async (toolCid: string) => {
+        setLoading("addTool", true);
         setError("");
         try {
             const sdk = await Admin.create(
@@ -178,19 +214,82 @@ export default function AdminPage() {
                 }
             );
 
-            await sdk.removeTool(agentAddress, toolCid);
-            setTools(tools.filter((tool) => tool !== toolCid));
+            const pkpId = await sdk.getTokenIdByPkpEthAddress(agentAddress);
+            await sdk.registerTool(pkpId, toolCid);
+
+            // Update toolsData state with the new tool
+            setToolsData((prev) =>
+                prev
+                    ? {
+                          ...prev,
+                          toolsWithoutPolicies: {
+                              ...prev.toolsWithoutPolicies,
+                              [toolCid]: { delegatees: [] },
+                          },
+                      }
+                    : null
+            );
+
+            setNewTool(""); // Clear input field
+            setSuccess("Tool added successfully");
+        } catch (err) {
+            setError("Failed to add tool");
+            console.error(err);
+        } finally {
+            setLoading("addTool", false);
+        }
+    };
+
+    // 0xcfD06F9C44BBEC023E80aBaa91B9d1E75c74b0E3
+    // QmRcwjz5EpUaABPMwhgYwsDsy1noYNYkhr6nC8JqWUPEoy
+    const removeTool = async (toolCid: string) => {
+        setLoading("removeTool", true, toolCid);
+        setError("");
+        try {
+            const sdk = await Admin.create(
+                {
+                    type: "eoa",
+                    privateKey:
+                        "d653763be1854048e1a70dd9fc94d47c09c790fb1530a01ee65257b0b698c352",
+                },
+                {
+                    // @ts-ignore
+                    litNetwork: network,
+                    storage: {
+                        prefix: "lit-agent-wallet",
+                        ephemeral: false,
+                    },
+                }
+            );
+
+            const pkpId = await sdk.getTokenIdByPkpEthAddress(agentAddress);
+            await sdk.removeTool(pkpId, toolCid);
+
+            // Update toolsData state by removing the tool
+            setToolsData((prev) => {
+                if (!prev) return null;
+                const newState = { ...prev };
+                delete newState.toolsWithPolicies[toolCid];
+                delete newState.toolsWithoutPolicies[toolCid];
+                delete newState.toolsUnknownWithPolicies[toolCid];
+                newState.toolsUnknownWithoutPolicies =
+                    newState.toolsUnknownWithoutPolicies.filter(
+                        (t) => t !== toolCid
+                    );
+                return newState;
+            });
+
             setSuccess("Tool removed successfully");
         } catch (err) {
             setError("Failed to remove tool");
             console.error(err);
         } finally {
-            setIsLoading(false);
+            setLoading("removeTool", false, toolCid);
         }
     };
 
-    const removeDelegatee = async (delegateeAddress: string) => {
-        setIsLoading(true);
+    const addDelegatee = async (delegateeAddress: string) => {
+        setLoading("addDelegatee", true);
         setError("");
         try {
             const sdk = await Admin.create(
@@ -209,16 +308,74 @@ export default function AdminPage() {
                 }
             );
 
-            await sdk.removeDelegatee(agentAddress, delegateeAddress);
-            setDelegatees(
-                delegatees.filter((delegatee) => delegatee !== delegateeAddress)
+            const pkpId = await sdk.getTokenIdByPkpEthAddress(agentAddress);
+            await sdk.addDelegatee(pkpId, delegateeAddress);
+
+            // Update delegatees state
+            setDelegatees((prev) => [...prev, delegateeAddress]);
+            setNewDelegatee(""); // Clear input field
+            setSuccess("Delegatee added successfully");
+        } catch (err) {
+            setError("Failed to add delegatee");
+            console.error(err);
+        } finally {
+            setLoading("addDelegatee", false);
+        }
+    };
+
+    const removeDelegatee = async (delegateeAddress: string) => {
+        setLoading("removeDelegatee", true, delegateeAddress);
+        setError("");
+        try {
+            const sdk = await Admin.create(
+                {
+                    type: "eoa",
+                    privateKey:
+                        "d653763be1854048e1a70dd9fc94d47c09c790fb1530a01ee65257b0b698c352",
+                },
+                {
+                    // @ts-ignore
+                    litNetwork: network,
+                    storage: {
+                        prefix: "lit-agent-wallet",
+                        ephemeral: false,
+                    },
+                }
             );
+
+            const pkpId = await sdk.getTokenIdByPkpEthAddress(agentAddress);
+            await sdk.removeDelegatee(pkpId, delegateeAddress);
+
+            // Update delegatees state
+            setDelegatees((prev) => prev.filter((d) => d !== delegateeAddress));
+
+            // Update toolsData to remove delegatee from all tools
+            setToolsData((prev) => {
+                if (!prev) return null;
+                const newState = { ...prev };
+                Object.keys(newState.toolsWithPolicies).forEach((toolCid) => {
+                    newState.toolsWithPolicies[toolCid].delegatees =
+                        newState.toolsWithPolicies[toolCid].delegatees.filter(
+                            (d) => d !== delegateeAddress
+                        );
+                });
+                Object.keys(newState.toolsUnknownWithPolicies).forEach(
+                    (toolCid) => {
+                        newState.toolsUnknownWithPolicies[toolCid].delegatees =
+                            newState.toolsUnknownWithPolicies[
+                                toolCid
+                            ].delegatees.filter((d) => d !== delegateeAddress);
+                    }
+                );
+                return newState;
+            });
+
             setSuccess("Delegatee removed successfully");
         } catch (err) {
             setError("Failed to remove delegatee");
             console.error(err);
         } finally {
-            setIsLoading(false);
+            setLoading("removeDelegatee", false, delegateeAddress);
         }
     };
 
@@ -283,21 +440,30 @@ export default function AdminPage() {
                             />
                             <Button
                                 onClick={fetchAgentDetails}
-                                disabled={isLoading || !agentAddress}
+                                disabled={loadingStates.fetch || !agentAddress}
                                 variant="secondary"
                                 className="w-full"
                             >
-                                Fetch Permissions
+                                {loadingStates.fetch
+                                    ? "Fetching..."
+                                    : "Fetch Permissions"}
                             </Button>
                         </div>
 
                         <div className="border-t pt-6">
                             <Button
                                 onClick={mintAgentWallet}
-                                disabled={isLoading}
+                                disabled={
+                                    loadingStates.fetch ||
+                                    loadingStates.mint ||
+                                    loadingStates.addTool ||
+                                    loadingStates.addDelegatee ||
+                                    Object.values(loadingStates.removeTool).some(Boolean) ||
+                                    Object.values(loadingStates.removeDelegatee).some(Boolean)
+                                }
                                 className="w-full md:w-auto"
                             >
-                                {isLoading
+                                {loadingStates.mint
                                     ? "Minting..."
                                     : "Mint New Agent Wallet"}
                             </Button>
@@ -317,12 +483,18 @@ export default function AdminPage() {
                                 value={newTool}
                                 onChange={(e) => setNewTool(e.target.value)}
                             />
-                            <Button variant="outline" className="w-full">
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => addTool(newTool)}
+                                disabled={loadingStates.addTool || !newTool}
+                            >
                                 <Plus className="h-4 w-4 mr-2" />
-                                Add Tool
+                                {loadingStates.addTool
+                                    ? "Adding..."
+                                    : "Add Tool"}
                             </Button>
                         </div>
-
                         <div className="space-y-2">
                             {getAllTools().map((tool, index) => (
                                 <div
@@ -338,9 +510,29 @@ export default function AdminPage() {
                                                 {tool}
                                             </code>
                                         </div>
-                                        <Button variant="outline" size="sm">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => removeTool(tool)}
+                                            disabled={
+                                                loadingStates.removeTool[
+                                                    tool
+                                                ] ||
+                                                Object.values(
+                                                    loadingStates
+                                                ).some((val) =>
+                                                    typeof val === "boolean"
+                                                        ? val
+                                                        : Object.values(
+                                                              val
+                                                          ).some(Boolean)
+                                                )
+                                            }
+                                        >
                                             <Minus className="h-3 w-3 mr-1" />
-                                            Remove
+                                            {loadingStates.removeTool[tool]
+                                                ? "Removing..."
+                                                : "Remove"}
                                         </Button>
                                     </div>
 
@@ -363,8 +555,38 @@ export default function AdminPage() {
                                                                 variant="ghost"
                                                                 size="sm"
                                                                 className="h-7"
+                                                                onClick={() =>
+                                                                    removeDelegatee(
+                                                                        delegatee
+                                                                    )
+                                                                }
+                                                                disabled={
+                                                                    loadingStates
+                                                                        .removeDelegatee[
+                                                                        delegatee
+                                                                    ] ||
+                                                                    Object.values(
+                                                                        loadingStates
+                                                                    ).some(
+                                                                        (val) =>
+                                                                            typeof val ===
+                                                                            "boolean"
+                                                                                ? val
+                                                                                : Object.values(
+                                                                                      val
+                                                                                  ).some(
+                                                                                      Boolean
+                                                                                  )
+                                                                    )
+                                                                }
                                                             >
-                                                                <Minus className="h-3 w-3" /> Remove    
+                                                                <Minus className="h-3 w-3" />
+                                                                {loadingStates
+                                                                    .removeDelegatee[
+                                                                    delegatee
+                                                                ]
+                                                                    ? "Removing..."
+                                                                    : "Remove"}
                                                             </Button>
                                                         </div>
                                                     )
@@ -392,9 +614,18 @@ export default function AdminPage() {
                                     setNewDelegatee(e.target.value)
                                 }
                             />
-                            <Button variant="outline" className="w-full">
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => addDelegatee(newDelegatee)}
+                                disabled={
+                                    loadingStates.addDelegatee || !newDelegatee
+                                }
+                            >
                                 <Plus className="h-4 w-4 mr-2" />
-                                Add Delegatee
+                                {loadingStates.addDelegatee
+                                    ? "Adding..."
+                                    : "Add Delegatee"}
                             </Button>
                         </div>
 
@@ -411,8 +642,29 @@ export default function AdminPage() {
                                         variant="ghost"
                                         size="sm"
                                         className="h-7"
+                                        onClick={() =>
+                                            removeDelegatee(delegatee)
+                                        }
+                                        disabled={
+                                            loadingStates.removeDelegatee[
+                                                delegatee
+                                            ] ||
+                                            Object.values(loadingStates).some(
+                                                (val) =>
+                                                    typeof val === "boolean"
+                                                        ? val
+                                                        : Object.values(
+                                                              val
+                                                          ).some(Boolean)
+                                            )
+                                        }
                                     >
-                                        <Minus className="h-3 w-3" /> Remove
+                                        <Minus className="h-3 w-3" />
+                                        {loadingStates.removeDelegatee[
+                                            delegatee
+                                        ]
+                                            ? "Removing..."
+                                            : "Remove"}
                                     </Button>
                                 </div>
                             ))}
