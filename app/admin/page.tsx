@@ -1,6 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 import { Header } from "@/app/components/Header";
 import { useState, useEffect } from "react";
@@ -9,10 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Shield, AlertTriangle, Plus, Minus } from "lucide-react";
-import { Admin, getToolByIpfsCid } from "@lit-protocol/agent-wallet";
+import {
+    PkpToolRegistryContract,
+} from "@lit-protocol/agent-wallet";
 import { IPFS_CID_TO_ACTION_NAME } from "@/app/admin/config";
 import React from "react";
-
+import { LIT_NETWORKS_KEYS } from "@lit-protocol/types"
+import { ethers } from "ethers"
+    
 export default function AdminPage() {
     const [network, setNetwork] = useState(() => {
         if (typeof window !== "undefined") {
@@ -28,6 +29,8 @@ export default function AdminPage() {
         addDelegatee: boolean;
         removeTool: Record<string, boolean>;
         removeDelegatee: Record<string, boolean>;
+        toggleTool: Record<string, boolean>;
+        addToolDelegatee: Record<string, boolean>;
     }>({
         fetch: false,
         mint: false,
@@ -35,6 +38,8 @@ export default function AdminPage() {
         addDelegatee: false,
         removeTool: {},
         removeDelegatee: {},
+        toggleTool: {},
+        addToolDelegatee: {},
     });
 
     const [error, setError] = useState("");
@@ -44,7 +49,6 @@ export default function AdminPage() {
     const [newDelegatee, setNewDelegatee] = useState("");
     const [agentAddress, setAgentAddress] = useState("");
 
-    const [tools, setTools] = useState<string[]>([]);
     const [delegatees, setDelegatees] = useState<string[]>([]);
 
     interface ToolMetadata {
@@ -71,6 +75,12 @@ export default function AdminPage() {
     const [toolsData, setToolsData] = useState<ToolsData | null>(null);
 
     const [toolNames, setToolNames] = useState<Record<string, string>>({});
+
+    // Add new state to track which tool's input field should be shown
+    const [showDelegateeInput, setShowDelegateeInput] = useState<string | null>(
+        null
+    );
+    const [newToolDelegatee, setNewToolDelegatee] = useState("");
 
     useEffect(() => {
         const tools = getAllTools();
@@ -119,30 +129,39 @@ export default function AdminPage() {
         setLoading("fetch", true);
         setError("");
         try {
-            const sdk = await Admin.create(
-                {
-                    type: "eoa",
-                    privateKey:
-                        "d653763be1854048e1a70dd9fc94d47c09c790fb1530a01ee65257b0b698c352",
-                },
-                {
-                    // @ts-ignore
-                    litNetwork: network,
-                    storage: {
-                        prefix: "lit-agent-wallet",
-                        ephemeral: false,
-                    },
-                }
-            );
+            const pkpToolRegistryContract = new PkpToolRegistryContract({
+                litNetwork: network as LIT_NETWORKS_KEYS,
+            });
+            await pkpToolRegistryContract.connect();
 
-            const pkpId = await sdk.getTokenIdByPkpEthAddress(agentAddress);
+            const pkpId =
+                await pkpToolRegistryContract.getTokenIdByPkpEthAddress(
+                    agentAddress
+                );
             console.log("pkpId", pkpId);
 
             const allToolsInfo =
-                await sdk.getRegisteredToolsAndDelegateesForPkp(pkpId);
+                await pkpToolRegistryContract.getRegisteredToolsAndDelegateesForPkp(
+                    pkpId
+                );
             console.log("toolsData", allToolsInfo);
 
-            const delegatees = await sdk.getDelegatees(pkpId);
+            // Check enabled status for each tool
+            for (const toolCid of getAllTools()) {
+                const { isEnabled } =
+                    await pkpToolRegistryContract.isToolRegistered(
+                        pkpId,
+                        toolCid
+                    );
+                if (allToolsInfo.toolsUnknownWithPolicies[toolCid]) {
+                    allToolsInfo.toolsUnknownWithPolicies[toolCid].toolEnabled =
+                        isEnabled;
+                }
+            }
+
+            const delegatees = await pkpToolRegistryContract.getDelegatees(
+                pkpId
+            );
             console.log("delegatees", delegatees);
 
             setToolsData(allToolsInfo);
@@ -164,25 +183,21 @@ export default function AdminPage() {
         setError("");
         setSuccess("");
         try {
-            const sdk = await Admin.create(
-                {
-                    type: "eoa",
-                    privateKey:
-                        "d653763be1854048e1a70dd9fc94d47c09c790fb1530a01ee65257b0b698c352",
-                },
-                {
-                    // @ts-ignore
-                    litNetwork: network,
-                    storage: {
-                        prefix: "lit-agent-wallet",
-                        ephemeral: false,
-                    },
-                }
-            );
+            const provider = new ethers.providers.Web3Provider(window.ethereum);
+            const signer = provider.getSigner();
+            const pkpToolRegistryContract = new PkpToolRegistryContract({
+                litNetwork: network as LIT_NETWORKS_KEYS,
+                signer
+            });
+            await pkpToolRegistryContract.connect();
 
-            const response = await sdk.mintPkp();
+            const response = await pkpToolRegistryContract.mintPkp();
             const pkp = response.info;
             console.log(pkp);
+            
+            // Set the newly minted address to the agentAddress state
+            setAgentAddress(pkp.ethAddress);
+            
             setSuccess(
                 `Agent wallet minted successfully!\nPKP: ${pkp.ethAddress}`
             );
@@ -197,25 +212,17 @@ export default function AdminPage() {
     const addTool = async (toolCid: string) => {
         setLoading("addTool", true);
         setError("");
-        try {
-            const sdk = await Admin.create(
-                {
-                    type: "eoa",
-                    privateKey:
-                        "d653763be1854048e1a70dd9fc94d47c09c790fb1530a01ee65257b0b698c352",
-                },
-                {
-                    // @ts-ignore
-                    litNetwork: network,
-                    storage: {
-                        prefix: "lit-agent-wallet",
-                        ephemeral: false,
-                    },
-                }
-            );
 
-            const pkpId = await sdk.getTokenIdByPkpEthAddress(agentAddress);
-            await sdk.registerTool(pkpId, toolCid);
+        try {
+            const pkpToolRegistryContract = new PkpToolRegistryContract({
+                litNetwork: network as LIT_NETWORKS_KEYS
+            });
+            await pkpToolRegistryContract.connect();
+            const pkpId =
+                await pkpToolRegistryContract.getTokenIdByPkpEthAddress(
+                    agentAddress
+                );
+            await pkpToolRegistryContract.registerTool(pkpId, toolCid);
 
             // Update toolsData state with the new tool
             setToolsData((prev) =>
@@ -230,7 +237,7 @@ export default function AdminPage() {
                     : null
             );
 
-            setNewTool(""); // Clear input field
+            setNewTool("");
             setSuccess("Tool added successfully");
         } catch (err) {
             setError("Failed to add tool");
@@ -240,30 +247,20 @@ export default function AdminPage() {
         }
     };
 
-    // 0xcfD06F9C44BBEC023E80aBaa91B9d1E75c74b0E3
-    // QmRcwjz5EpUaABPMwhgYwsDsy1noYNYkhr6nC8JqWUPEoy
     const removeTool = async (toolCid: string) => {
         setLoading("removeTool", true, toolCid);
         setError("");
         try {
-            const sdk = await Admin.create(
-                {
-                    type: "eoa",
-                    privateKey:
-                        "d653763be1854048e1a70dd9fc94d47c09c790fb1530a01ee65257b0b698c352",
-                },
-                {
-                    // @ts-ignore
-                    litNetwork: network,
-                    storage: {
-                        prefix: "lit-agent-wallet",
-                        ephemeral: false,
-                    },
-                }
-            );
+            const pkpToolRegistryContract = new PkpToolRegistryContract({
+                litNetwork: network as LIT_NETWORKS_KEYS
+            });
+            await pkpToolRegistryContract.connect();
 
-            const pkpId = await sdk.getTokenIdByPkpEthAddress(agentAddress);
-            await sdk.removeTool(pkpId, toolCid);
+            const pkpId =
+                await pkpToolRegistryContract.getTokenIdByPkpEthAddress(
+                    agentAddress
+                );
+            await pkpToolRegistryContract.removeTool(pkpId, toolCid);
 
             // Update toolsData state by removing the tool
             setToolsData((prev) => {
@@ -292,28 +289,19 @@ export default function AdminPage() {
         setLoading("addDelegatee", true);
         setError("");
         try {
-            const sdk = await Admin.create(
-                {
-                    type: "eoa",
-                    privateKey:
-                        "d653763be1854048e1a70dd9fc94d47c09c790fb1530a01ee65257b0b698c352",
-                },
-                {
-                    // @ts-ignore
-                    litNetwork: network,
-                    storage: {
-                        prefix: "lit-agent-wallet",
-                        ephemeral: false,
-                    },
-                }
-            );
+            const pkpToolRegistryContract = new PkpToolRegistryContract({
+                litNetwork: network as LIT_NETWORKS_KEYS
+            });
+            await pkpToolRegistryContract.connect();
 
-            const pkpId = await sdk.getTokenIdByPkpEthAddress(agentAddress);
-            await sdk.addDelegatee(pkpId, delegateeAddress);
+            const pkpId =
+                await pkpToolRegistryContract.getTokenIdByPkpEthAddress(
+                    agentAddress
+                );
+            await pkpToolRegistryContract.addDelegatee(pkpId, delegateeAddress);
 
-            // Update delegatees state
             setDelegatees((prev) => [...prev, delegateeAddress]);
-            setNewDelegatee(""); // Clear input field
+            setNewDelegatee("");
             setSuccess("Delegatee added successfully");
         } catch (err) {
             setError("Failed to add delegatee");
@@ -327,26 +315,20 @@ export default function AdminPage() {
         setLoading("removeDelegatee", true, delegateeAddress);
         setError("");
         try {
-            const sdk = await Admin.create(
-                {
-                    type: "eoa",
-                    privateKey:
-                        "d653763be1854048e1a70dd9fc94d47c09c790fb1530a01ee65257b0b698c352",
-                },
-                {
-                    // @ts-ignore
-                    litNetwork: network,
-                    storage: {
-                        prefix: "lit-agent-wallet",
-                        ephemeral: false,
-                    },
-                }
+            const pkpToolRegistryContract = new PkpToolRegistryContract({
+                litNetwork: network as LIT_NETWORKS_KEYS
+            });
+            await pkpToolRegistryContract.connect();
+
+            const pkpId =
+                await pkpToolRegistryContract.getTokenIdByPkpEthAddress(
+                    agentAddress
+                );
+            await pkpToolRegistryContract.removeDelegatee(
+                pkpId,
+                delegateeAddress
             );
 
-            const pkpId = await sdk.getTokenIdByPkpEthAddress(agentAddress);
-            await sdk.removeDelegatee(pkpId, delegateeAddress);
-
-            // Update delegatees state
             setDelegatees((prev) => prev.filter((d) => d !== delegateeAddress));
 
             // Update toolsData to remove delegatee from all tools
@@ -395,6 +377,95 @@ export default function AdminPage() {
 
         const tool = toolsData.toolsUnknownWithPolicies[toolCid];
         return tool?.delegatees || [];
+    };
+
+    const toggleTool = async (toolCid: string, enable: boolean) => {
+        setLoading("toggleTool", true, toolCid);
+        setError("");
+        try {
+            const pkpToolRegistryContract = new PkpToolRegistryContract({
+                litNetwork: network as LIT_NETWORKS_KEYS,
+            });
+            await pkpToolRegistryContract.connect();
+
+            const pkpId =
+                await pkpToolRegistryContract.getTokenIdByPkpEthAddress(
+                    agentAddress
+                );
+            if (enable) {
+                await pkpToolRegistryContract.enableTool(pkpId, toolCid);
+            } else {
+                await pkpToolRegistryContract.disableTool(pkpId, toolCid);
+            }
+
+            // Update toolsData state
+            setToolsData((prev) => {
+                if (!prev) return null;
+                const newState = { ...prev };
+                if (newState.toolsWithPolicies[toolCid]) {
+                    newState.toolsWithPolicies[toolCid].toolEnabled = enable;
+                }
+                if (newState.toolsUnknownWithPolicies[toolCid]) {
+                    newState.toolsUnknownWithPolicies[toolCid].toolEnabled =
+                        enable;
+                }
+                return newState;
+            });
+
+            setSuccess(`Tool ${enable ? "enabled" : "disabled"} successfully`);
+        } catch (err) {
+            setError(`Failed to ${enable ? "enable" : "disable"} tool`);
+            console.error(err);
+        } finally {
+            setLoading("toggleTool", false, toolCid);
+        }
+    };
+
+    const addDelegateeTool = async (
+        toolCid: string,
+        delegateeAddress: string
+    ) => {
+        setLoading("addToolDelegatee", true, toolCid);
+        setError("");
+        try {
+            const pkpToolRegistryContract = new PkpToolRegistryContract({
+                litNetwork: network as LIT_NETWORKS_KEYS
+            });
+            await pkpToolRegistryContract.connect();
+
+            const pkpId =
+                await pkpToolRegistryContract.getTokenIdByPkpEthAddress(
+                    agentAddress
+                );
+            await pkpToolRegistryContract.permitToolForDelegatee(
+                pkpId,
+                toolCid,
+                delegateeAddress
+            );
+
+            // Update toolsData state
+            setToolsData((prev) => {
+                if (!prev) return null;
+                const newState = { ...prev };
+                if (newState.toolsUnknownWithPolicies[toolCid]) {
+                    newState.toolsUnknownWithPolicies[toolCid].delegatees = [
+                        ...newState.toolsUnknownWithPolicies[toolCid]
+                            .delegatees,
+                        delegateeAddress,
+                    ];
+                }
+                return newState;
+            });
+
+            setSuccess("Delegatee added to tool successfully");
+            // Clear the input field after successful addition
+            setNewToolDelegatee("");
+        } catch (err) {
+            setError("Failed to add delegatee to tool");
+            console.error(err);
+        } finally {
+            setLoading("addToolDelegatee", false, toolCid);
+        }
     };
 
     return (
@@ -458,8 +529,12 @@ export default function AdminPage() {
                                     loadingStates.mint ||
                                     loadingStates.addTool ||
                                     loadingStates.addDelegatee ||
-                                    Object.values(loadingStates.removeTool).some(Boolean) ||
-                                    Object.values(loadingStates.removeDelegatee).some(Boolean)
+                                    Object.values(
+                                        loadingStates.removeTool
+                                    ).some(Boolean) ||
+                                    Object.values(
+                                        loadingStates.removeDelegatee
+                                    ).some(Boolean)
                                 }
                                 className="w-full md:w-auto"
                             >
@@ -510,31 +585,117 @@ export default function AdminPage() {
                                                 {tool}
                                             </code>
                                         </div>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => removeTool(tool)}
-                                            disabled={
-                                                loadingStates.removeTool[
-                                                    tool
-                                                ] ||
-                                                Object.values(
+                                        <div className="flex items-center space-x-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    toggleTool(
+                                                        tool,
+                                                        !toolsData
+                                                            ?.toolsUnknownWithPolicies[
+                                                            tool
+                                                        ]?.toolEnabled
+                                                    )
+                                                }
+                                                disabled={
+                                                    loadingStates.toggleTool[
+                                                        tool
+                                                    ] ||
                                                     loadingStates
-                                                ).some((val) =>
-                                                    typeof val === "boolean"
-                                                        ? val
-                                                        : Object.values(
-                                                              val
-                                                          ).some(Boolean)
-                                                )
-                                            }
-                                        >
-                                            <Minus className="h-3 w-3 mr-1" />
-                                            {loadingStates.removeTool[tool]
-                                                ? "Removing..."
-                                                : "Remove"}
-                                        </Button>
+                                                        .addToolDelegatee[tool]
+                                                }
+                                            >
+                                                {loadingStates.toggleTool[tool]
+                                                    ? "Updating..."
+                                                    : toolsData
+                                                          ?.toolsUnknownWithPolicies[
+                                                          tool
+                                                      ]?.toolEnabled
+                                                    ? "Disable"
+                                                    : "Enable"}
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setShowDelegateeInput(
+                                                        showDelegateeInput ===
+                                                            tool
+                                                            ? null
+                                                            : tool
+                                                    );
+                                                    setNewToolDelegatee("");
+                                                }}
+                                                disabled={
+                                                    loadingStates
+                                                        .addToolDelegatee[tool]
+                                                }
+                                            >
+                                                <Plus className="h-3 w-3 mr-1" />
+                                                {loadingStates.addToolDelegatee[
+                                                    tool
+                                                ]
+                                                    ? "Adding..."
+                                                    : "Add Delegatee"}
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => removeTool(tool)}
+                                                disabled={
+                                                    loadingStates.removeTool[
+                                                        tool
+                                                    ] ||
+                                                    loadingStates
+                                                        .addToolDelegatee[tool]
+                                                }
+                                            >
+                                                <Minus className="h-3 w-3 mr-1" />
+                                                {loadingStates.removeTool[tool]
+                                                    ? "Removing..."
+                                                    : "Remove"}
+                                            </Button>
+                                        </div>
                                     </div>
+
+                                    {showDelegateeInput === tool && (
+                                        <div className="mt-2 grid grid-cols-1 md:grid-cols-4 gap-2">
+                                            <Input
+                                                className="md:col-span-3"
+                                                placeholder="Enter delegatee address"
+                                                value={newToolDelegatee}
+                                                onChange={(e) =>
+                                                    setNewToolDelegatee(
+                                                        e.target.value
+                                                    )
+                                                }
+                                            />
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={() => {
+                                                    if (newToolDelegatee) {
+                                                        addDelegateeTool(
+                                                            tool,
+                                                            newToolDelegatee
+                                                        );
+                                                    }
+                                                }}
+                                                disabled={
+                                                    !newToolDelegatee ||
+                                                    loadingStates
+                                                        .addToolDelegatee[tool]
+                                                }
+                                            >
+                                                {loadingStates.addToolDelegatee[
+                                                    tool
+                                                ]
+                                                    ? "Adding..."
+                                                    : "Add"}
+                                            </Button>
+                                        </div>
+                                    )}
 
                                     {getDelegateesForTool(tool).length > 0 && (
                                         <div className="mt-2 pl-4 border-l-2 border-gray-200">
@@ -552,7 +713,7 @@ export default function AdminPage() {
                                                                 {delegatee}
                                                             </code>
                                                             <Button
-                                                                variant="ghost"
+                                                                variant="outline"
                                                                 size="sm"
                                                                 className="h-7"
                                                                 onClick={() =>
@@ -639,7 +800,7 @@ export default function AdminPage() {
                                         {delegatee}
                                     </code>
                                     <Button
-                                        variant="ghost"
+                                        variant="outline"
                                         size="sm"
                                         className="h-7"
                                         onClick={() =>

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
@@ -8,20 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Shield, AlertTriangle, Flame } from "lucide-react";
+import { Shield, AlertTriangle } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
-import {
-    Select,
-    SelectContent,
-    SelectGroup,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
-} from "@/components/ui/select";
 import { useAccount, useWalletClient } from "wagmi";
-import { Admin } from "@lit-protocol/agent-wallet";
-import Link from "next/link";
+import { PkpToolRegistryContract } from "@lit-protocol/agent-wallet";
 import { Header } from "@/app/components/Header";
+import { LIT_NETWORKS_KEYS } from "@lit-protocol/types"
 
 interface AgentDetails {
     owner: string;
@@ -35,44 +26,6 @@ interface ToolData {
     delegateePolicies: Record<string, { policyEnabled: boolean }>;
     policyIpfsCid?: string;
 }
-
-const NetworkSelector = ({
-    value,
-    onValueChange,
-}: {
-    value: string;
-    onValueChange: (value: string) => void;
-}) => {
-    const networks = [
-        { id: "datil-dev", name: "DatilDev" },
-        { id: "datil-test", name: "DatilTest" },
-        { id: "datil", name: "Datil" },
-    ];
-
-    return (
-        <Select value={value} onValueChange={onValueChange}>
-            <SelectTrigger className="w-32">
-                <SelectValue placeholder="Select network" />
-            </SelectTrigger>
-            <SelectContent>
-                <SelectGroup>
-                    {networks.map((network) => (
-                        <SelectItem
-                            key={network.id}
-                            value={network.id}
-                            className="flex items-center gap-2"
-                        >
-                            <div className="flex items-center gap-2">
-                                <Flame className="h-4 w-4" />
-                                <span>{network.name}</span>
-                            </div>
-                        </SelectItem>
-                    ))}
-                </SelectGroup>
-            </SelectContent>
-        </Select>
-    );
-};
 
 const QueryPage = () => {
     const [network, setNetwork] = useState(() => {
@@ -92,21 +45,8 @@ const QueryPage = () => {
         [walletClient]
     );
 
-    const [walletAddress, setWalletAddress] = useState(() => {
-        if (typeof window !== "undefined") {
-            return localStorage.getItem("lastWalletAddress") || "";
-        }
-        return "";
-    });
-    const [agentDetails, setAgentDetails] = useState<AgentDetails | null>(
-        () => {
-            if (typeof window !== "undefined") {
-                const saved = localStorage.getItem("lastAgentDetails");
-                return saved ? JSON.parse(saved) : null;
-            }
-            return null;
-        }
-    );
+    const [walletAddress, setWalletAddress] = useState();
+    const [agentDetails, setAgentDetails] = useState<AgentDetails | null>();
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [mounted, setMounted] = useState(false);
@@ -118,32 +58,6 @@ const QueryPage = () => {
         setMounted(true);
     }, []);
 
-    useEffect(() => {
-        if (walletAddress) {
-            localStorage.setItem("lastWalletAddress", walletAddress);
-        }
-    }, [walletAddress]);
-
-    useEffect(() => {
-        if (agentDetails) {
-            localStorage.setItem(
-                "lastAgentDetails",
-                JSON.stringify(agentDetails)
-            );
-        }
-    }, [agentDetails]);
-
-    useEffect(() => {
-        if (error) {
-            localStorage.removeItem("lastAgentDetails");
-        }
-    }, [error]);
-
-    useEffect(() => {
-        if (network) {
-            localStorage.setItem("selectedNetwork", network);
-        }
-    }, [network]);
 
     if (!mounted) {
         return null;
@@ -157,28 +71,17 @@ const QueryPage = () => {
         setError("");
 
         try {
-            const sdk = await Admin.create(
-                {
-                    type: "eoa",
-                    privateKey:
-                        "d653763be1854048e1a70dd9fc94d47c09c790fb1530a01ee65257b0b698c352",
-                },
-                {
-                    // @ts-ignore
-                    litNetwork: network,
-                    storage: {
-                        prefix: "lit-agent-wallet", // prefix for keys in localStorage
-                        ephemeral: false, // persist data between page reloads
-                    },
-                }
-            );
+            const pkpToolRegistryContract = new PkpToolRegistryContract({
+                litNetwork: network as LIT_NETWORKS_KEYS,
+            });
+            await pkpToolRegistryContract.connect();
 
             if (!signer || !address) {
                 setError("Please connect your wallet first");
                 return;
             }
 
-            const pkpId = await sdk.getTokenIdByPkpEthAddress(walletAddress);
+            const pkpId = await pkpToolRegistryContract.getTokenIdByPkpEthAddress(walletAddress);
             console.log("pkpId", pkpId);
 
             if (pkpId.isZero()) {
@@ -188,11 +91,9 @@ const QueryPage = () => {
             }
 
             const allToolsInfo =
-                await sdk.getRegisteredToolsAndDelegateesForPkp(pkpId);
-            // console.log("getRegisteredToolsAndDelegateesForPkp", allToolsInfo);
+                await pkpToolRegistryContract.getRegisteredToolsAndDelegateesForPkp(pkpId);
 
-            const delegatees = await sdk.getDelegatees(pkpId);
-            // console.log("delegatees", delegatees);
+            const delegatees = await pkpToolRegistryContract.getDelegatees(pkpId);
 
             function findToolsWithPolicies(data: any) {
                 const toolsWithPolicies = {
@@ -244,7 +145,7 @@ const QueryPage = () => {
             console.log("allTools", allTools);
             console.log("toolsWithPolicies", toolsWithPolicies);
 
-            const owner = await sdk.getPKPOwner(pkpId);
+            const owner = await pkpToolRegistryContract.getPKPOwner(pkpId);
             console.log("owner", owner);
             setAgentDetails({
                 owner,
