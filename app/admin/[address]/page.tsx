@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Shield, AlertTriangle, Plus, Minus } from "lucide-react";
+import { Shield, AlertTriangle, Plus, Minus, ArrowUpRight } from "lucide-react";
 import { PkpToolRegistryContract } from "@lit-protocol/agent-wallet";
 import { LIT_NETWORKS_KEYS } from "@lit-protocol/types";
 import { ethers } from "ethers";
@@ -55,19 +55,23 @@ export default function AdminPage({ params }: Props) {
         mint: boolean;
         addTool: boolean;
         addDelegatee: boolean;
+        transferAgentWallet: boolean;
         removeTool: Record<string, boolean>;
         removeDelegatee: Record<string, boolean>;
         toggleTool: Record<string, boolean>;
         addToolDelegatee: Record<string, boolean>;
+        addToolPolicy: Record<string, boolean>;
     }>({
         fetch: false,
         mint: false,
         addTool: false,
         addDelegatee: false,
+        transferAgentWallet: false,
         removeTool: {},
         removeDelegatee: {},
         toggleTool: {},
         addToolDelegatee: {},
+        addToolPolicy: {},
     });
 
     const [error, setError] = useState("");
@@ -76,6 +80,8 @@ export default function AdminPage({ params }: Props) {
     const [newTool, setNewTool] = useState("");
     const [newDelegatee, setNewDelegatee] = useState("");
     const [delegatees, setDelegatees] = useState<string[]>([]);
+    const [policyDelegateeAddress, setPolicyDelegateeAddress] = useState<string>("");
+    const [newAgentOwner, setNewAgentOwner] = useState("");
     const [agentAddress, setAgentAddress] = useState<string>("");
     const [searchInput, setSearchInput] = useState("");
     const router = useRouter();
@@ -94,6 +100,8 @@ export default function AdminPage({ params }: Props) {
         null
     );
     const [newToolDelegatee, setNewToolDelegatee] = useState("");
+    const [showPolicyInput, setShowPolicyInput] = useState<string | null>(null);
+    const [newPolicy, setNewPolicy] = useState("");
 
     useEffect(() => {
         const tools = getAllTools();
@@ -493,6 +501,64 @@ export default function AdminPage({ params }: Props) {
         }
     };
 
+    const addToolPolicy = async (toolCid: string, policyCid: string) => {
+        setLoading("addToolPolicy", true, toolCid);
+        setError("");
+        try {
+            const pkpToolRegistryContract = new PkpToolRegistryContract({
+                litNetwork: network as LIT_NETWORKS_KEYS,
+            });
+            await pkpToolRegistryContract.connect();
+
+            const pkpId =
+                await pkpToolRegistryContract.getTokenIdByPkpEthAddress(
+                    agentAddress
+                );
+            await pkpToolRegistryContract.setToolPolicyForDelegatee(
+                pkpId.toString(),
+                policyDelegateeAddress,
+                toolCid,
+                policyCid,
+                false
+            );
+
+            setSuccess("Policy added to tool successfully");
+        } catch (err) {
+            setError("Failed to add policy to tool");
+            console.error(err);
+        } finally {
+            setLoading("addToolPolicy", false, toolCid);
+        }
+    };
+
+    const transferAgentWallet = async (newAgentOwner: string) => {
+        setLoading("transferAgentWallet", true, newAgentOwner);
+        setError("");
+        try {
+            const pkpToolRegistryContract = new PkpToolRegistryContract({
+                litNetwork: network as LIT_NETWORKS_KEYS,
+            });
+            await pkpToolRegistryContract.connect();
+
+            const pkpId =
+                await pkpToolRegistryContract.getTokenIdByPkpEthAddress(
+                    agentAddress
+                );
+            await pkpToolRegistryContract.transferPkpOwnership(
+                pkpId.toString(),
+                newAgentOwner,
+                agentAddress
+            );
+
+            setSuccess("Agent wallet transferred successfully");
+        } catch (err) {
+            setError("Failed to transfer agent wallet");
+            console.error(err);
+        } finally {
+            setLoading("transferAgentWallet", false, newAgentOwner);
+        }
+    };
+
     useEffect(() => {
         if (agentAddress) {
             fetchAgentDetails();
@@ -532,7 +598,8 @@ export default function AdminPage({ params }: Props) {
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <p className="text-gray-600 mb-6">
-                            Manage the agent&apos;s permissions, policies and delegatees as an admin.
+                            Manage the agent&apos;s permissions, policies and
+                            delegatees as an admin.
                         </p>
                         <div className="flex gap-3 mb-4">
                             <Input
@@ -621,9 +688,6 @@ export default function AdminPage({ params }: Props) {
                                             <span className="font-medium text-sm">
                                                 {getToolName(tool)}
                                             </span>
-                                            <code className="text-xs text-gray-500 hidden md:inline">
-                                                {tool}
-                                            </code>
                                         </div>
                                         <div className="flex items-center space-x-2">
                                             <Button
@@ -652,8 +716,49 @@ export default function AdminPage({ params }: Props) {
                                                           ?.toolsUnknownWithPolicies[
                                                           tool
                                                       ]?.toolEnabled
-                                                    ? "Disable"
-                                                    : "Enable"}
+                                                    ? "Disable Tool"
+                                                    : "Enable Tool"}
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => removeTool(tool)}
+                                                disabled={
+                                                    loadingStates.removeTool[
+                                                        tool
+                                                    ] ||
+                                                    loadingStates
+                                                        .addToolDelegatee[tool]
+                                                }
+                                            >
+                                                <Minus className="h-3 w-3 mr-1" />
+                                                {loadingStates.removeTool[tool]
+                                                    ? "Removing..."
+                                                    : "Remove Tool"}
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setShowPolicyInput(
+                                                        showPolicyInput === tool
+                                                            ? null
+                                                            : tool
+                                                    );
+                                                    setNewPolicy("");
+                                                }}
+                                                disabled={
+                                                    loadingStates.addToolPolicy[
+                                                        tool
+                                                    ]
+                                                }
+                                            >
+                                                <Plus className="h-3 w-3 mr-1" />
+                                                {loadingStates.addToolPolicy[
+                                                    tool
+                                                ]
+                                                    ? "Adding..."
+                                                    : "Add Policy"}
                                             </Button>
                                             <Button
                                                 variant="outline"
@@ -680,25 +785,67 @@ export default function AdminPage({ params }: Props) {
                                                     : "Add Delegatee"}
                                             </Button>
                                             <Button
-                                                variant="outline"
+                                                variant="ghost"
                                                 size="sm"
-                                                onClick={() => removeTool(tool)}
-                                                disabled={
-                                                    loadingStates.removeTool[
-                                                        tool
-                                                    ] ||
-                                                    loadingStates
-                                                        .addToolDelegatee[tool]
+                                                className="p-0 h-auto"
+                                                onClick={() =>
+                                                    router.push(`/ipfs/${tool}`)
                                                 }
                                             >
-                                                <Minus className="h-3 w-3 mr-1" />
-                                                {loadingStates.removeTool[tool]
-                                                    ? "Removing..."
-                                                    : "Remove"}
+                                                <span className="ml-2">→</span>
                                             </Button>
                                         </div>
                                     </div>
 
+                                    {/* Add Policy Input Field */}
+                                    {showPolicyInput === tool && (
+                                        <div className="mt-2 grid grid-cols-1 md:grid-cols-4 gap-2">
+                                            <Input
+                                                className="md:col-span-3"
+                                                placeholder="Enter policy IPFS CID"
+                                                value={newPolicy}
+                                                onChange={(e) =>
+                                                    setNewPolicy(e.target.value)
+                                                }
+                                            />
+                                            <Input
+                                                className="md:col-span-3"
+                                                placeholder="Enter policy delegatee address"
+                                                value={policyDelegateeAddress}
+                                                onChange={(e) =>
+                                                    setPolicyDelegateeAddress(
+                                                        e.target.value
+                                                    )
+                                                }
+                                            />
+                                            <Button
+                                                variant="secondary"
+                                                size="sm"
+                                                onClick={() => {
+                                                    if (newPolicy) {
+                                                        addToolPolicy(
+                                                            tool,
+                                                            newPolicy
+                                                        );
+                                                    }
+                                                }}
+                                                disabled={
+                                                    !newPolicy ||
+                                                    loadingStates.addToolPolicy[
+                                                        tool
+                                                    ]
+                                                }
+                                            >
+                                                {loadingStates.addToolPolicy[
+                                                    tool
+                                                ]
+                                                    ? "Adding..."
+                                                    : "Add"}
+                                            </Button>
+                                        </div>
+                                    )}
+
+                                    {/* Add Delegatee Input Field */}
                                     {showDelegateeInput === tool && (
                                         <div className="mt-2 grid grid-cols-1 md:grid-cols-4 gap-2">
                                             <Input
@@ -869,6 +1016,39 @@ export default function AdminPage({ params }: Props) {
                                     </Button>
                                 </div>
                             ))}
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Transfer Agent Wallet</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <Input
+                                className="md:col-span-3"
+                                placeholder="New Owner Address"
+                                value={newAgentOwner}
+                                onChange={(e) =>
+                                    setNewAgentOwner(e.target.value)
+                                }
+                            />
+                            <Button
+                                variant="outline"
+                                className="w-full"
+                                onClick={() =>
+                                    transferAgentWallet(newAgentOwner)
+                                }
+                                disabled={
+                                    loadingStates.transferAgentWallet ||
+                                    !newAgentOwner
+                                }
+                            >
+                                {loadingStates.transferAgentWallet
+                                    ? "Transferring..."
+                                    : "Transfer Agent Wallet"}
+                            </Button>
                         </div>
                     </CardContent>
                 </Card>
