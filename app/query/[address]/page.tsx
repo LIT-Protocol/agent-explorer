@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 import React, { useState, useEffect } from "react";
+import { Header } from "@/app/components/Header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +10,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Shield, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { PkpToolRegistryContract } from "@lit-protocol/agent-wallet";
-import { Header } from "@/app/components/Header";
 import { LIT_NETWORKS_KEYS } from "@lit-protocol/types";
-import { IPFS_CID_TO_ACTION_NAME } from "@/app/admin/config";
+import { IPFS_CID_TO_ACTION_NAME } from "@/config";
 
 interface AgentDetails {
     owner: string;
@@ -44,8 +44,8 @@ const QueryPage = ({ params }: Props) => {
     const [error, setError] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [toolNames, setToolNames] = useState<Record<string, string>>({});
-    const [agentAddress, setAgentAddress] = useState<string>('');
-    const [searchInput, setSearchInput] = useState('');
+    const [agentAddress, setAgentAddress] = useState<string>("");
+    const [searchInput, setSearchInput] = useState("");
     const router = useRouter();
     const searchParams: { address: string } = React.use(params as any);
 
@@ -191,32 +191,43 @@ const QueryPage = ({ params }: Props) => {
         <div className="max-w-4xl mx-auto p-6">
             <Header network={network} setNetwork={setNetwork} />
 
-            <div className="mb-6">
-                <div className="flex gap-3 mb-4">
-                    <Input
-                        className="flex-1"
-                        type="text"
-                        placeholder="Enter Agent's Wallet Address"
-                        value={searchInput}
-                        onChange={(e) => setSearchInput(e.target.value)}
-                        onKeyDown={(e) => {
-                            if (e.key === "Enter" && searchInput) {
-                                router.push(`/query/${searchInput}`);
-                            }
-                        }}
-                    />
-                    <Button
-                        onClick={() => {
-                            if (searchInput) {
-                                router.push(`/query/${searchInput}`);
-                            }
-                        }}
-                        disabled={isLoading}
-                    >
-                        {isLoading ? "Checking..." : "Check Permissions"}
-                    </Button>
-                </div>
-            </div>
+            <Card className="mb-6">
+                <CardHeader>
+                    <CardTitle>Query</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                <p className="text-gray-600 mb-6">
+                        Verify the tool permissions, policies and delegatees of any
+                        agent by entering their wallet address.
+                    </p>
+                        <div className="flex gap-3 mb-4">
+                            <Input
+                                className="flex-1"
+                                type="text"
+                                placeholder="Enter Agent's Wallet Address"
+                                value={searchInput}
+                                onChange={(e) => setSearchInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" && searchInput) {
+                                        router.push(`/query/${searchInput}`);
+                                    }
+                                }}
+                            />
+                            <Button
+                                onClick={() => {
+                                    if (searchInput) {
+                                        router.push(`/query/${searchInput}`);
+                                    }
+                                }}
+                                disabled={isLoading}
+                            >
+                                {isLoading
+                                    ? "Checking..."
+                                    : "Check Permissions"}
+                            </Button>
+                        </div>
+                </CardContent>
+            </Card>
 
             {error && (
                 <Alert variant="destructive">

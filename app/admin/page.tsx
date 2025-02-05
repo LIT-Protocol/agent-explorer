@@ -27,9 +27,12 @@ const AdminSearchPage = () => {
             <Header network={network} setNetwork={setNetwork} />
             <Card>
                 <CardHeader>
-                    <CardTitle>Agent Details</CardTitle>
+                    <CardTitle>Admin</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                    <p className="text-gray-600 mb-6">
+                        Manage the agent&apos;s permissions, policies and delegatees as an admin.
+                    </p>
                     <div className="flex gap-3 mb-4">
                         <Input
                             className="flex-1"
@@ -65,9 +68,7 @@ const AdminSearchPage = () => {
                             disabled={isLoading}
                             className="w-full md:w-auto"
                         >
-                            {isLoading
-                                ? "Minting..."
-                                : "Mint New Agent Wallet"}
+                            {isLoading ? "Minting..." : "Mint New Agent Wallet"}
                         </Button>
                     </div>
                 </CardContent>

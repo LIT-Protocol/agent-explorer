@@ -49,13 +49,13 @@ export function Header({ network, setNetwork }: {
             </div>
 
             <div className="flex gap-4 mb-6">
-                <NavButton href="/" active={pathname === "/"}>
+                <NavButton href="/" active={pathname === "/" || pathname.startsWith("/query/")}>
                     Query
                 </NavButton>
-                <NavButton href="/admin" active={pathname === "/admin"}>
+                <NavButton href="/admin" active={pathname === "/admin" || pathname.startsWith("/admin/")}>
                     Admin
                 </NavButton>
-                <NavButton href="/delegatee" active={pathname === "/delegatee"}>
+                <NavButton href="/delegatee" active={pathname === "/delegatee" || pathname.startsWith("/delegatee/")}>
                     Delegatee
                 </NavButton>
             </div>

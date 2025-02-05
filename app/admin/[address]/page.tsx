@@ -10,10 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Shield, AlertTriangle, Plus, Minus } from "lucide-react";
 import { PkpToolRegistryContract } from "@lit-protocol/agent-wallet";
-import { IPFS_CID_TO_ACTION_NAME } from "@/app/admin/config";
 import { LIT_NETWORKS_KEYS } from "@lit-protocol/types";
 import { ethers } from "ethers";
 import { useRouter } from "next/navigation";
+import { IPFS_CID_TO_ACTION_NAME } from "@/config";
 
 interface Props {
     params: {
@@ -528,9 +528,12 @@ export default function AdminPage({ params }: Props) {
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>Agent Details</CardTitle>
+                        <CardTitle>Admin</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-6">
+                        <p className="text-gray-600 mb-6">
+                            Manage the agent&apos;s permissions, policies and delegatees as an admin.
+                        </p>
                         <div className="flex gap-3 mb-4">
                             <Input
                                 className="flex-1"
