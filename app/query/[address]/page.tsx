@@ -9,9 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Shield, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { PkpToolRegistryContract } from "@lit-protocol/agent-wallet";
+import { listAllTools, PkpToolRegistryContract, getToolByIpfsCid, getToolByName } from "@lit-protocol/agent-wallet";
 import { LIT_NETWORKS_KEYS } from "@lit-protocol/types";
-import { IPFS_CID_TO_ACTION_NAME } from "@/config";
 
 interface AgentDetails {
     owner: string;
@@ -32,6 +31,30 @@ interface Props {
     };
 }
 
+// Add utility function for truncating CID
+function truncateCid(cid: string, startLength: number = 10, endLength: number = 4): string {
+    if (cid.length <= startLength + endLength) return cid;
+    return `${cid.slice(0, startLength)}...${cid.slice(-endLength)}`;
+}
+
+// Add interface for supported tools
+interface SupportedTool {
+    name: string;
+    cid: string;
+    description: string;
+}
+
+// Add function to process tools based on network
+function processToolsForNetwork(toolsResponse: any[], network: string): SupportedTool[] {
+    return toolsResponse
+        .filter(item => item.network === network)
+        .map(item => ({
+            name: item.tool.name,
+            cid: item.tool.ipfsCid,
+            description: item.tool.description
+        }));
+}
+
 const QueryPage = ({ params }: Props) => {
     const [network, setNetwork] = useState(() => {
         if (typeof window !== "undefined") {
@@ -49,16 +72,15 @@ const QueryPage = ({ params }: Props) => {
     const router = useRouter();
     const searchParams: { address: string } = React.use(params as any);
 
+    // Add new state for supported tools
+    const [supportedTools, setSupportedTools] = useState<SupportedTool[]>([]);
+
     useEffect(() => {
         if (searchParams.address) {
             setAgentAddress(searchParams.address);
             setSearchInput(searchParams.address);
         }
     }, [searchParams.address]);
-
-    const getToolName = (cid: string) => {
-        return toolNames[cid] || cid;
-    };
 
     const fetchAgentDetails = async () => {
         console.log("fetching agent details...");
@@ -181,6 +203,26 @@ const QueryPage = ({ params }: Props) => {
         return policyIpfsCids;
     }
 
+    function resolveToolName(cid: string): string {
+        const tool = supportedTools.find(t => t.cid === cid);
+        return tool?.name || cid;
+    }
+
+    async function fetchSupportedTools() {
+        try {
+            const tools = listAllTools();
+            const processedTools = processToolsForNetwork(tools, network);
+            setSupportedTools(processedTools);
+        } catch (error) {
+            console.error("Error fetching supported tools:", error);
+        }
+    }
+
+    // Add useEffect to fetch supported tools
+    useEffect(() => {
+        fetchSupportedTools();
+    }, [network]);
+
     useEffect(() => {
         if (agentAddress) {
             fetchAgentDetails();
@@ -196,36 +238,34 @@ const QueryPage = ({ params }: Props) => {
                     <CardTitle>Query</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                <p className="text-gray-600 mb-6">
-                        Verify the tool permissions, policies and delegatees of any
-                        agent by entering their wallet address.
+                    <p className="text-gray-600 mb-6">
+                        Verify the tool permissions, policies and delegatees of
+                        any agent by entering their wallet address.
                     </p>
-                        <div className="flex gap-3 mb-4">
-                            <Input
-                                className="flex-1"
-                                type="text"
-                                placeholder="Enter Agent's Wallet Address"
-                                value={searchInput}
-                                onChange={(e) => setSearchInput(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter" && searchInput) {
-                                        router.push(`/query/${searchInput}`);
-                                    }
-                                }}
-                            />
-                            <Button
-                                onClick={() => {
-                                    if (searchInput) {
-                                        router.push(`/query/${searchInput}`);
-                                    }
-                                }}
-                                disabled={isLoading}
-                            >
-                                {isLoading
-                                    ? "Checking..."
-                                    : "Check Permissions"}
-                            </Button>
-                        </div>
+                    <div className="flex gap-3 mb-4">
+                        <Input
+                            className="flex-1"
+                            type="text"
+                            placeholder="Enter Agent's Wallet Address"
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" && searchInput) {
+                                    router.push(`/query/${searchInput}`);
+                                }
+                            }}
+                        />
+                        <Button
+                            onClick={() => {
+                                if (searchInput) {
+                                    router.push(`/query/${searchInput}`);
+                                }
+                            }}
+                            disabled={isLoading}
+                        >
+                            {isLoading ? "Checking..." : "Check Permissions"}
+                        </Button>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -252,7 +292,7 @@ const QueryPage = ({ params }: Props) => {
 
                     <Card>
                         <CardHeader>
-                            <CardTitle>Owner Details</CardTitle>
+                            <CardTitle>Owner</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="font-mono bg-gray-50 p-4 rounded-md break-all">
@@ -308,7 +348,7 @@ const QueryPage = ({ params }: Props) => {
                                                         )
                                                     }
                                                 >
-                                                    {tool}
+                                                    {resolveToolName(tool)}
                                                     <span className="ml-2">
                                                         →
                                                     </span>
@@ -354,7 +394,7 @@ const QueryPage = ({ params }: Props) => {
                                                         )
                                                     }
                                                 >
-                                                    {toolId}
+                                                    {resolveToolName(toolId)} ({toolData?.toolEnabled ? "Enabled" : "Disabled"})
                                                     <span className="ml-2">
                                                         →
                                                     </span>
@@ -362,17 +402,7 @@ const QueryPage = ({ params }: Props) => {
                                                 <div className="space-y-3">
                                                     <div>
                                                         <label className="text-sm text-gray-600 block mb-1">
-                                                            Tool Enabled:
-                                                        </label>
-                                                        <div className="bg-gray-50 p-2 rounded">
-                                                            {toolData?.toolEnabled
-                                                                ? "Yes"
-                                                                : "No"}
-                                                        </div>
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-sm text-gray-600 block mb-1">
-                                                            Delegatee Policies:
+                                                            Policies:
                                                         </label>
                                                         <div className="bg-gray-50 p-2 rounded">
                                                             {toolData?.delegateePolicies &&
@@ -393,9 +423,9 @@ const QueryPage = ({ params }: Props) => {
                                                                                 delegatee
                                                                             }
                                                                             :{" "}
-                                                                            {policy?.policyEnabled
+                                                                            ({policy?.policyEnabled
                                                                                 ? "Enabled"
-                                                                                : "Disabled"}
+                                                                                : "Disabled"})
                                                                         </div>
                                                                     )
                                                                 )}
