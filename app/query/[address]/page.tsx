@@ -9,7 +9,12 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Shield, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { listAllTools, PkpToolRegistryContract, getToolByIpfsCid, getToolByName } from "@lit-protocol/agent-wallet";
+import {
+    listAllTools,
+    PkpToolRegistryContract,
+    getToolByIpfsCid,
+    getToolByName,
+} from "@lit-protocol/agent-wallet";
 import { LIT_NETWORKS_KEYS } from "@lit-protocol/types";
 
 interface AgentDetails {
@@ -32,7 +37,11 @@ interface Props {
 }
 
 // Add utility function for truncating CID
-function truncateCid(cid: string, startLength: number = 10, endLength: number = 4): string {
+function truncateCid(
+    cid: string,
+    startLength: number = 10,
+    endLength: number = 4
+): string {
     if (cid.length <= startLength + endLength) return cid;
     return `${cid.slice(0, startLength)}...${cid.slice(-endLength)}`;
 }
@@ -45,13 +54,16 @@ interface SupportedTool {
 }
 
 // Add function to process tools based on network
-function processToolsForNetwork(toolsResponse: any[], network: string): SupportedTool[] {
+function processToolsForNetwork(
+    toolsResponse: any[],
+    network: string
+): SupportedTool[] {
     return toolsResponse
-        .filter(item => item.network === network)
-        .map(item => ({
+        .filter((item) => item.network === network)
+        .map((item) => ({
             name: item.tool.name,
             cid: item.tool.ipfsCid,
-            description: item.tool.description
+            description: item.tool.description,
         }));
 }
 
@@ -204,7 +216,7 @@ const QueryPage = ({ params }: Props) => {
     }
 
     function resolveToolName(cid: string): string {
-        const tool = supportedTools.find(t => t.cid === cid);
+        const tool = supportedTools.find((t) => t.cid === cid);
         return tool?.name || cid;
     }
 
@@ -394,7 +406,11 @@ const QueryPage = ({ params }: Props) => {
                                                         )
                                                     }
                                                 >
-                                                    {resolveToolName(toolId)} ({toolData?.toolEnabled ? "Enabled" : "Disabled"})
+                                                    {resolveToolName(toolId)} (
+                                                    {toolData?.toolEnabled
+                                                        ? "Enabled"
+                                                        : "Disabled"}
+                                                    )
                                                     <span className="ml-2">
                                                         →
                                                     </span>
@@ -422,10 +438,11 @@ const QueryPage = ({ params }: Props) => {
                                                                             {
                                                                                 delegatee
                                                                             }
-                                                                            :{" "}
-                                                                            ({policy?.policyEnabled
+                                                                            : (
+                                                                            {policy?.policyEnabled
                                                                                 ? "Enabled"
-                                                                                : "Disabled"})
+                                                                                : "Disabled"}
+                                                                            )
                                                                         </div>
                                                                     )
                                                                 )}

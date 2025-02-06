@@ -8,7 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Shield, AlertTriangle, Plus, Minus, ArrowUpRight } from "lucide-react";
-import { PkpToolRegistryContract, getToolByIpfsCid, getToolByName, listAllTools } from "@lit-protocol/agent-wallet";
+import {
+    PkpToolRegistryContract,
+    getToolByIpfsCid,
+    getToolByName,
+    listAllTools,
+} from "@lit-protocol/agent-wallet";
 import { LIT_NETWORKS_KEYS } from "@lit-protocol/types";
 import { ethers } from "ethers";
 import { useRouter } from "next/navigation";
@@ -48,25 +53,32 @@ interface SupportedTool {
 }
 
 // Add new function to process tools based on network
-function processToolsForNetwork(toolsResponse: any[], network: string): SupportedTool[] {
+function processToolsForNetwork(
+    toolsResponse: any[],
+    network: string
+): SupportedTool[] {
     return toolsResponse
-        .filter(item => item.network === network)
-        .map(item => ({
+        .filter((item) => item.network === network)
+        .map((item) => ({
             name: item.tool.name,
             cid: item.tool.ipfsCid,
-            description: item.tool.description
+            description: item.tool.description,
         }));
 }
 
 // Add utility function to truncate CID
-function truncateCid(cid: string, startLength: number = 10, endLength: number = 4): string {
+function truncateCid(
+    cid: string,
+    startLength: number = 10,
+    endLength: number = 4
+): string {
     if (cid.length <= startLength + endLength) return cid;
     return `${cid.slice(0, startLength)}...${cid.slice(-endLength)}`;
 }
 
 // Update resolveToolName to use truncation
 function resolveToolName(cid: string, tools: SupportedTool[]): string {
-    const tool = tools.find(t => t.cid === cid);
+    const tool = tools.find((t) => t.cid === cid);
     return tool?.name || truncateCid(cid); // Return truncated CID if tool name not found
 }
 
@@ -110,7 +122,8 @@ export default function AdminPage({ params }: Props) {
     const [newTool, setNewTool] = useState("");
     const [newDelegatee, setNewDelegatee] = useState("");
     const [delegatees, setDelegatees] = useState<string[]>([]);
-    const [policyDelegateeAddress, setPolicyDelegateeAddress] = useState<string>("");
+    const [policyDelegateeAddress, setPolicyDelegateeAddress] =
+        useState<string>("");
     const [newAgentOwner, setNewAgentOwner] = useState("");
     const [agentAddress, setAgentAddress] = useState<string>("");
     const [searchInput, setSearchInput] = useState("");
@@ -143,19 +156,22 @@ export default function AdminPage({ params }: Props) {
     // Add click outside handler
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+            if (
+                dropdownRef.current &&
+                !dropdownRef.current.contains(event.target as Node)
+            ) {
                 setShowSupportedTools(false);
             }
         }
 
         // Add event listener when dropdown is shown
         if (showSupportedTools) {
-            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener("mousedown", handleClickOutside);
         }
 
         // Cleanup
         return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener("mousedown", handleClickOutside);
         };
     }, [showSupportedTools]);
 
@@ -164,8 +180,11 @@ export default function AdminPage({ params }: Props) {
         try {
             const tools = listAllTools();
             // Determine current network - you'll need to replace this with your actual network detection logic
-            const currentNetwork = 'datil-dev'; // Example: replace with actual network detection
-            const processedTools = processToolsForNetwork(tools, currentNetwork);
+            const currentNetwork = "datil-dev"; // Example: replace with actual network detection
+            const processedTools = processToolsForNetwork(
+                tools,
+                currentNetwork
+            );
             // console.log(processedTools);
             setSupportedTools(processedTools);
         } catch (error) {
@@ -182,12 +201,15 @@ export default function AdminPage({ params }: Props) {
         const updateToolNames = async () => {
             const tools = listAllTools();
             // Get current network - replace with your actual network detection
-            const currentNetwork = 'datil-dev';
-            const availableTools = processToolsForNetwork(tools, currentNetwork);
+            const currentNetwork = "datil-dev";
+            const availableTools = processToolsForNetwork(
+                tools,
+                currentNetwork
+            );
 
             // Get all tools from toolsData
             const existingTools = getAllTools();
-            
+
             // Update tool names
             existingTools.forEach((cid) => {
                 if (toolNames[cid]) return;
@@ -234,6 +256,7 @@ export default function AdminPage({ params }: Props) {
         setLoading("fetch", true);
         setError("");
         try {
+            console.log("network", network);
             const pkpToolRegistryContract = new PkpToolRegistryContract({
                 litNetwork: network as LIT_NETWORKS_KEYS,
             });
@@ -248,6 +271,8 @@ export default function AdminPage({ params }: Props) {
                 await pkpToolRegistryContract.getRegisteredToolsAndDelegateesForPkp(
                     pkpId.toString()
                 );
+
+            console.log(allToolsInfo);
 
             // Check enabled status for each tool
             for (const toolCid of getAllTools()) {
@@ -638,20 +663,24 @@ export default function AdminPage({ params }: Props) {
         }
     };
 
-    const handleInputToggle = (tool: string, type: 'policy' | 'delegatee') => {
-        if (type === 'policy') {
+    const handleInputToggle = (tool: string, type: "policy" | "delegatee") => {
+        if (type === "policy") {
             setShowPolicyInput(showPolicyInput === tool ? null : tool);
             setShowDelegateeInput(null);
-            setNewPolicy('');
-            setPolicyDelegateeAddress('');
+            setNewPolicy("");
+            setPolicyDelegateeAddress("");
         } else {
             setShowDelegateeInput(showDelegateeInput === tool ? null : tool);
             setShowPolicyInput(null);
-            setNewToolDelegatee('');
+            setNewToolDelegatee("");
         }
     };
 
-    const togglePolicy = async (toolCid: string, delegatee: string, enable: boolean) => {
+    const togglePolicy = async (
+        toolCid: string,
+        delegatee: string,
+        enable: boolean
+    ) => {
         setLoading("togglePolicy", true, `${toolCid}-${delegatee}`);
         setError("");
         try {
@@ -660,8 +689,11 @@ export default function AdminPage({ params }: Props) {
             });
             await pkpToolRegistryContract.connect();
 
-            const pkpId = await pkpToolRegistryContract.getTokenIdByPkpEthAddress(agentAddress);
-            
+            const pkpId =
+                await pkpToolRegistryContract.getTokenIdByPkpEthAddress(
+                    agentAddress
+                );
+
             if (enable) {
                 await pkpToolRegistryContract.enableToolPolicyForDelegatee(
                     pkpId.toString(),
@@ -680,13 +712,20 @@ export default function AdminPage({ params }: Props) {
             setToolsData((prev) => {
                 if (!prev) return null;
                 const newState = { ...prev };
-                if (newState.toolsUnknownWithPolicies[toolCid]?.delegateePolicies[delegatee]) {
-                    newState.toolsUnknownWithPolicies[toolCid].delegateePolicies[delegatee].policyEnabled = enable;
+                if (
+                    newState.toolsUnknownWithPolicies[toolCid]
+                        ?.delegateePolicies[delegatee]
+                ) {
+                    newState.toolsUnknownWithPolicies[
+                        toolCid
+                    ].delegateePolicies[delegatee].policyEnabled = enable;
                 }
                 return newState;
             });
 
-            setSuccess(`Policy ${enable ? "enabled" : "disabled"} successfully`);
+            setSuccess(
+                `Policy ${enable ? "enabled" : "disabled"} successfully`
+            );
         } catch (err) {
             setError(`Failed to ${enable ? "enable" : "disable"} policy`);
             console.error(err);
@@ -705,8 +744,11 @@ export default function AdminPage({ params }: Props) {
             });
             await pkpToolRegistryContract.connect();
 
-            const pkpId = await pkpToolRegistryContract.getTokenIdByPkpEthAddress(agentAddress);
-            
+            const pkpId =
+                await pkpToolRegistryContract.getTokenIdByPkpEthAddress(
+                    agentAddress
+                );
+
             await pkpToolRegistryContract.removeToolPolicyForDelegatee(
                 pkpId.toString(),
                 toolCid,
@@ -717,8 +759,12 @@ export default function AdminPage({ params }: Props) {
             setToolsData((prev) => {
                 if (!prev) return null;
                 const newState = { ...prev };
-                if (newState.toolsUnknownWithPolicies[toolCid]?.delegateePolicies[delegatee]) {
-                    delete newState.toolsUnknownWithPolicies[toolCid].delegateePolicies[delegatee];
+                if (
+                    newState.toolsUnknownWithPolicies[toolCid]
+                        ?.delegateePolicies[delegatee]
+                ) {
+                    delete newState.toolsUnknownWithPolicies[toolCid]
+                        .delegateePolicies[delegatee];
                 }
                 return newState;
             });
@@ -833,31 +879,53 @@ export default function AdminPage({ params }: Props) {
                     <CardContent className="space-y-4">
                         <div className="space-y-4">
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div className="md:col-span-3 relative" ref={dropdownRef}>
+                                <div
+                                    className="md:col-span-3 relative"
+                                    ref={dropdownRef}
+                                >
                                     <Input
                                         placeholder="Tool IPFS CID"
                                         value={newTool}
-                                        onChange={(e) => setNewTool(e.target.value)}
-                                        onFocus={() => setShowSupportedTools(true)}
+                                        onChange={(e) =>
+                                            setNewTool(e.target.value)
+                                        }
+                                        onFocus={() =>
+                                            setShowSupportedTools(true)
+                                        }
                                     />
-                                    {showSupportedTools && supportedTools.length > 0 && (
-                                        <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
-                                            {supportedTools.map((tool, index) => (
-                                                <div
-                                                    key={index}
-                                                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                                                    onClick={() => {
-                                                        setNewTool(tool.cid);
-                                                        setShowSupportedTools(false);
-                                                    }}
-                                                >
-                                                    <div className="font-medium">{tool.name}</div>
-                                                    <div className="text-sm text-gray-600">{tool.description}</div>
-                                                    <div className="text-xs text-gray-500">{tool.cid}</div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
+                                    {showSupportedTools &&
+                                        supportedTools.length > 0 && (
+                                            <div className="absolute z-10 w-full mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                                                {supportedTools.map(
+                                                    (tool, index) => (
+                                                        <div
+                                                            key={index}
+                                                            className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
+                                                            onClick={() => {
+                                                                setNewTool(
+                                                                    tool.cid
+                                                                );
+                                                                setShowSupportedTools(
+                                                                    false
+                                                                );
+                                                            }}
+                                                        >
+                                                            <div className="font-medium">
+                                                                {tool.name}
+                                                            </div>
+                                                            <div className="text-sm text-gray-600">
+                                                                {
+                                                                    tool.description
+                                                                }
+                                                            </div>
+                                                            <div className="text-xs text-gray-500">
+                                                                {tool.cid}
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                )}
+                                            </div>
+                                        )}
                                 </div>
                                 <Button
                                     variant="outline"
@@ -866,7 +934,9 @@ export default function AdminPage({ params }: Props) {
                                     disabled={loadingStates.addTool || !newTool}
                                 >
                                     <Plus className="h-4 w-4 mr-2" />
-                                    {loadingStates.addTool ? "Adding..." : "Add Tool"}
+                                    {loadingStates.addTool
+                                        ? "Adding..."
+                                        : "Add Tool"}
                                 </Button>
                             </div>
                         </div>
@@ -880,8 +950,24 @@ export default function AdminPage({ params }: Props) {
                                         <div className="flex items-center space-x-2">
                                             <span className="font-medium text-sm">
                                                 {getToolName(tool)}
-                                                <span className={`text-xs ml-2 ${toolsData?.toolsUnknownWithPolicies[tool]?.toolEnabled ? 'text-green-600' : 'text-gray-500'}`}>
-                                                    ({toolsData?.toolsUnknownWithPolicies[tool]?.toolEnabled ? 'Enabled' : 'Disabled'})
+                                                <span
+                                                    className={`text-xs ml-2 ${
+                                                        toolsData
+                                                            ?.toolsUnknownWithPolicies[
+                                                            tool
+                                                        ]?.toolEnabled
+                                                            ? "text-green-600"
+                                                            : "text-gray-500"
+                                                    }`}
+                                                >
+                                                    (
+                                                    {toolsData
+                                                        ?.toolsUnknownWithPolicies[
+                                                        tool
+                                                    ]?.toolEnabled
+                                                        ? "Enabled"
+                                                        : "Disabled"}
+                                                    )
                                                 </span>
                                             </span>
                                         </div>
@@ -892,14 +978,26 @@ export default function AdminPage({ params }: Props) {
                                                 onClick={() =>
                                                     toggleTool(
                                                         tool,
-                                                        !toolsData?.toolsUnknownWithPolicies[tool]?.toolEnabled
+                                                        !toolsData
+                                                            ?.toolsUnknownWithPolicies[
+                                                            tool
+                                                        ]?.toolEnabled
                                                     )
                                                 }
-                                                disabled={loadingStates.toggleTool[tool] || loadingStates.addToolDelegatee[tool]}
+                                                disabled={
+                                                    loadingStates.toggleTool[
+                                                        tool
+                                                    ] ||
+                                                    loadingStates
+                                                        .addToolDelegatee[tool]
+                                                }
                                             >
                                                 {loadingStates.toggleTool[tool]
                                                     ? "Updating..."
-                                                    : toolsData?.toolsUnknownWithPolicies[tool]?.toolEnabled
+                                                    : toolsData
+                                                          ?.toolsUnknownWithPolicies[
+                                                          tool
+                                                      ]?.toolEnabled
                                                     ? "Disable Tool"
                                                     : "Enable Tool"}
                                             </Button>
@@ -907,7 +1005,13 @@ export default function AdminPage({ params }: Props) {
                                                 variant="outline"
                                                 size="sm"
                                                 onClick={() => removeTool(tool)}
-                                                disabled={loadingStates.removeTool[tool] || loadingStates.addToolDelegatee[tool]}
+                                                disabled={
+                                                    loadingStates.removeTool[
+                                                        tool
+                                                    ] ||
+                                                    loadingStates
+                                                        .addToolDelegatee[tool]
+                                                }
                                             >
                                                 <Minus className="h-3 w-3 mr-1" />
                                                 {loadingStates.removeTool[tool]
@@ -915,24 +1019,53 @@ export default function AdminPage({ params }: Props) {
                                                     : "Remove Tool"}
                                             </Button>
                                             <Button
-                                                variant={showPolicyInput === tool ? "secondary" : "outline"}
+                                                variant={
+                                                    showPolicyInput === tool
+                                                        ? "secondary"
+                                                        : "outline"
+                                                }
                                                 size="sm"
-                                                onClick={() => handleInputToggle(tool, 'policy')}
-                                                disabled={loadingStates.addToolPolicy[tool]}
+                                                onClick={() =>
+                                                    handleInputToggle(
+                                                        tool,
+                                                        "policy"
+                                                    )
+                                                }
+                                                disabled={
+                                                    loadingStates.addToolPolicy[
+                                                        tool
+                                                    ]
+                                                }
                                             >
                                                 <Plus className="h-3 w-3 mr-1" />
-                                                {loadingStates.addToolPolicy[tool]
+                                                {loadingStates.addToolPolicy[
+                                                    tool
+                                                ]
                                                     ? "Adding..."
                                                     : "Add Policy"}
                                             </Button>
                                             <Button
-                                                variant={showDelegateeInput === tool ? "secondary" : "outline"}
+                                                variant={
+                                                    showDelegateeInput === tool
+                                                        ? "secondary"
+                                                        : "outline"
+                                                }
                                                 size="sm"
-                                                onClick={() => handleInputToggle(tool, 'delegatee')}
-                                                disabled={loadingStates.addToolDelegatee[tool]}
+                                                onClick={() =>
+                                                    handleInputToggle(
+                                                        tool,
+                                                        "delegatee"
+                                                    )
+                                                }
+                                                disabled={
+                                                    loadingStates
+                                                        .addToolDelegatee[tool]
+                                                }
                                             >
                                                 <Plus className="h-3 w-3 mr-1" />
-                                                {loadingStates.addToolDelegatee[tool]
+                                                {loadingStates.addToolDelegatee[
+                                                    tool
+                                                ]
                                                     ? "Adding..."
                                                     : "Permit Delegatee"}
                                             </Button>
@@ -940,7 +1073,9 @@ export default function AdminPage({ params }: Props) {
                                                 variant="ghost"
                                                 size="sm"
                                                 className="p-0 h-auto"
-                                                onClick={() => router.push(`/ipfs/${tool}`)}
+                                                onClick={() =>
+                                                    router.push(`/ipfs/${tool}`)
+                                                }
                                             >
                                                 <span className="ml-2">→</span>
                                             </Button>
@@ -1028,8 +1163,8 @@ export default function AdminPage({ params }: Props) {
                                                 {loadingStates.addToolDelegatee[
                                                     tool
                                                 ]
-                                                    ? "Adding..."
-                                                    : "Add"}
+                                                    ? "Permitting..."
+                                                    : "Permit"}
                                             </Button>
                                         </div>
                                     )}
@@ -1037,87 +1172,158 @@ export default function AdminPage({ params }: Props) {
                                     {getDelegateesForTool(tool).length > 0 && (
                                         <div className="mt-2 pl-4 border-l-2 border-gray-200">
                                             <div className="space-y-1">
-                                                {getDelegateesForTool(tool).map((delegatee, dIndex) => {
-                                                    const policyInfo = toolsData?.toolsUnknownWithPolicies[tool]?.delegateePolicies[delegatee];
-                                                    
-                                                    return (
-                                                        <div
-                                                            key={dIndex}
-                                                            className="flex flex-col bg-white p-2 rounded text-sm"
-                                                        >
-                                                            <div className="flex items-center justify-between">
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="text-xs text-gray-500">Delegatee:</span>
-                                                                    <code className="text-xs text-gray-600">
-                                                                        {delegatee}
-                                                                    </code>
-                                                                </div>
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    className="h-7"
-                                                                    onClick={() => removeDelegatee(delegatee)}
-                                                                    disabled={loadingStates.removeDelegatee[delegatee]}
-                                                                >
-                                                                    <Minus className="h-3 w-3" />
-                                                                    {loadingStates.removeDelegatee[delegatee]
-                                                                        ? "..."
-                                                                        : "Unpermit"}
-                                                                </Button>
-                                                            </div>
-                                                            {policyInfo && (
-                                                                <div className="mt-1 flex items-center justify-between">
+                                                {getDelegateesForTool(tool).map(
+                                                    (delegatee, dIndex) => {
+                                                        const policyInfo =
+                                                            toolsData
+                                                                ?.toolsUnknownWithPolicies[
+                                                                tool
+                                                            ]
+                                                                ?.delegateePolicies[
+                                                                delegatee
+                                                            ];
+
+                                                        return (
+                                                            <div
+                                                                key={dIndex}
+                                                                className="flex flex-col bg-white p-2 rounded text-sm"
+                                                            >
+                                                                <div className="flex items-center justify-between">
                                                                     <div className="flex items-center gap-2">
-                                                                        <span className="text-xs text-gray-500">Policy:</span>
-                                                                        <div className="flex items-center">
-                                                                            <code className="text-xs text-gray-600">
-                                                                                {truncateCid(policyInfo.policyIpfsCid)}
-                                                                            </code>
-                                                                            <span className={`text-xs ml-2 ${policyInfo.policyEnabled ? 'text-green-600' : 'text-gray-500'}`}>
-                                                                                ({policyInfo.policyEnabled ? 'Enabled' : 'Disabled'})
+                                                                        <span className="text-xs text-gray-500">
+                                                                            Delegatee:
+                                                                        </span>
+                                                                        <code className="text-xs text-gray-600">
+                                                                            {
+                                                                                delegatee
+                                                                            }
+                                                                        </code>
+                                                                    </div>
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="h-7"
+                                                                        onClick={() =>
+                                                                            removeDelegatee(
+                                                                                delegatee
+                                                                            )
+                                                                        }
+                                                                        disabled={
+                                                                            loadingStates
+                                                                                .removeDelegatee[
+                                                                                delegatee
+                                                                            ]
+                                                                        }
+                                                                    >
+                                                                        <Minus className="h-3 w-3" />
+                                                                        {loadingStates
+                                                                            .removeDelegatee[
+                                                                            delegatee
+                                                                        ]
+                                                                            ? "..."
+                                                                            : "Unpermit"}
+                                                                    </Button>
+                                                                </div>
+                                                                {policyInfo && (
+                                                                    <div className="mt-1 flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-xs text-gray-500">
+                                                                                Policy:
                                                                             </span>
+                                                                            <div className="flex items-center">
+                                                                                <code className="text-xs text-gray-600">
+                                                                                    {truncateCid(
+                                                                                        policyInfo.policyIpfsCid
+                                                                                    )}
+                                                                                </code>
+                                                                                <span
+                                                                                    className={`text-xs ml-2 ${
+                                                                                        policyInfo.policyEnabled
+                                                                                            ? "text-green-600"
+                                                                                            : "text-gray-500"
+                                                                                    }`}
+                                                                                >
+                                                                                    (
+                                                                                    {policyInfo.policyEnabled
+                                                                                        ? "Enabled"
+                                                                                        : "Disabled"}
+
+                                                                                    )
+                                                                                </span>
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="sm"
+                                                                                    className="p-0 h-auto ml-1"
+                                                                                    onClick={() =>
+                                                                                        router.push(
+                                                                                            `/ipfs/${policyInfo.policyIpfsCid}`
+                                                                                        )
+                                                                                    }
+                                                                                >
+                                                                                    <ArrowUpRight className="h-3 w-3" />
+                                                                                </Button>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
                                                                             <Button
-                                                                                variant="ghost"
+                                                                                variant="outline"
                                                                                 size="sm"
-                                                                                className="p-0 h-auto ml-1"
-                                                                                onClick={() => router.push(`/ipfs/${policyInfo.policyIpfsCid}`)}
+                                                                                className="h-7"
+                                                                                onClick={() =>
+                                                                                    togglePolicy(
+                                                                                        tool,
+                                                                                        delegatee,
+                                                                                        !policyInfo.policyEnabled
+                                                                                    )
+                                                                                }
+                                                                                disabled={
+                                                                                    loadingStates
+                                                                                        .togglePolicy[
+                                                                                        `${tool}-${delegatee}`
+                                                                                    ]
+                                                                                }
                                                                             >
-                                                                                <ArrowUpRight className="h-3 w-3" />
+                                                                                {loadingStates
+                                                                                    .togglePolicy[
+                                                                                    `${tool}-${delegatee}`
+                                                                                ]
+                                                                                    ? "..."
+                                                                                    : policyInfo.policyEnabled
+                                                                                    ? "Disable"
+                                                                                    : "Enable"}
+                                                                            </Button>
+                                                                            <Button
+                                                                                variant="outline"
+                                                                                size="sm"
+                                                                                className="h-7"
+                                                                                onClick={() =>
+                                                                                    removePolicy(
+                                                                                        tool,
+                                                                                        delegatee
+                                                                                    )
+                                                                                }
+                                                                                disabled={
+                                                                                    loadingStates
+                                                                                        .togglePolicy[
+                                                                                        `${tool}-${delegatee}`
+                                                                                    ]
+                                                                                }
+                                                                            >
+                                                                                <Minus className="h-3 w-3" />
+                                                                                {loadingStates
+                                                                                    .togglePolicy[
+                                                                                    `${tool}-${delegatee}`
+                                                                                ]
+                                                                                    ? "..."
+                                                                                    : "Remove"}
                                                                             </Button>
                                                                         </div>
                                                                     </div>
-                                                                    <div className="flex items-center gap-2">
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            size="sm"
-                                                                            className="h-7"
-                                                                            onClick={() => togglePolicy(tool, delegatee, !policyInfo.policyEnabled)}
-                                                                            disabled={loadingStates.togglePolicy[`${tool}-${delegatee}`]}
-                                                                        >
-                                                                            {loadingStates.togglePolicy[`${tool}-${delegatee}`]
-                                                                                ? "..."
-                                                                                : policyInfo.policyEnabled
-                                                                                ? "Disable"
-                                                                                : "Enable"}
-                                                                        </Button>
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            size="sm"
-                                                                            className="h-7"
-                                                                            onClick={() => removePolicy(tool, delegatee)}
-                                                                            disabled={loadingStates.togglePolicy[`${tool}-${delegatee}`]}
-                                                                        >
-                                                                            <Minus className="h-3 w-3" />
-                                                                            {loadingStates.togglePolicy[`${tool}-${delegatee}`]
-                                                                                ? "..."
-                                                                                : "Remove"}
-                                                                        </Button>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    );
-                                                })}
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    }
+                                                )}
                                             </div>
                                         </div>
                                     )}

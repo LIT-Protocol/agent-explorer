@@ -10,10 +10,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ArrowUpRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { LIT_NETWORKS_KEYS } from "@lit-protocol/types";
-import { IPFS_CID_TO_ACTION_NAME } from "@/config";
 
 interface Props {
     params: {
@@ -29,10 +28,8 @@ export default function DelegateePage({ params }: Props) {
         return "datil-dev";
     });
     const [delegateeDetails, setDelegateeDetails] = useState<any>(null);
-    const [permittedTools, setPermittedTools] = useState<any>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [toolNames, setToolNames] = useState<Record<string, string>>({});
     const [agentAddress, setAgentAddress] = useState<string>("");
     const [searchInput, setSearchInput] = useState("");
     const router = useRouter();
@@ -45,14 +42,11 @@ export default function DelegateePage({ params }: Props) {
         }
     }, [searchParams.address]);
 
-    const getToolName = (cid: string) => {
-        return toolNames[cid] || cid;
-    };
-
     const fetchDelegateePKPs = async () => {
         try {
             setIsLoading(true);
             setError(null);
+            console.log("network", network);
             const pkpToolRegistryContract = new PkpToolRegistryContract({
                 litNetwork: network as LIT_NETWORKS_KEYS,
             });
@@ -63,7 +57,6 @@ export default function DelegateePage({ params }: Props) {
             );
             console.log("details", details);
 
-            // Create a new array to store PKPs with their tools
             const pkpsWithTools = await Promise.all(
                 details.map(async (pkp) => {
                     const toolsResponse =
@@ -71,10 +64,9 @@ export default function DelegateePage({ params }: Props) {
                             pkp.tokenId,
                             agentAddress
                         );
-                    console.log("toolsResponse", toolsResponse);
-                    const tools = [];
+                    console.log("getPermittedToolsForPkp", toolsResponse);
+                    const toolsWithPolicies = [];
 
-                    // Process all tool categories
                     const categories = [
                         toolsResponse.toolsWithPolicies,
                         toolsResponse.toolsWithoutPolicies,
@@ -86,7 +78,35 @@ export default function DelegateePage({ params }: Props) {
                         if (Array.isArray(category)) {
                             for (const tool of category) {
                                 if (tool.toolIpfsCid) {
-                                    tools.push(tool.toolIpfsCid);
+                                    // Get tool enabled status
+                                    const { isEnabled: toolEnabled } =
+                                        await pkpToolRegistryContract.isToolRegistered(
+                                            pkp.tokenId,
+                                            tool.toolIpfsCid
+                                        );
+
+                                    // Get policy information if available
+                                    const policyInfo =
+                                        await pkpToolRegistryContract
+                                            .getToolPolicyForDelegatee(
+                                                pkp.tokenId,
+                                                tool.toolIpfsCid,
+                                                agentAddress
+                                            )
+                                            .catch(() => null);
+
+                                    toolsWithPolicies.push({
+                                        toolIpfsCid: tool.toolIpfsCid,
+                                        toolEnabled,
+                                        policy: policyInfo
+                                            ? {
+                                                  policyIpfsCid:
+                                                      policyInfo.policyIpfsCid,
+                                                  policyEnabled:
+                                                      policyInfo.enabled,
+                                              }
+                                            : null,
+                                    });
                                 }
                             }
                         }
@@ -94,7 +114,7 @@ export default function DelegateePage({ params }: Props) {
 
                     return {
                         ...pkp,
-                        permittedTools: tools,
+                        permittedTools: toolsWithPolicies,
                     };
                 })
             );
@@ -133,7 +153,8 @@ export default function DelegateePage({ params }: Props) {
                     </CardHeader>
                     <CardContent className="space-y-6">
                         <p className="text-gray-600 mb-6">
-                            Verify the the delegatee&apos;s permissions and policies.
+                            Verify the the delegatee&apos;s permissions and
+                            policies.
                         </p>
                         <div className="flex gap-3 mb-4">
                             <Input
@@ -181,43 +202,132 @@ export default function DelegateePage({ params }: Props) {
                                             key={index}
                                             className="space-y-2 bg-gray-50 p-4 rounded"
                                         >
-                                            <div>
-                                                <span className="text-sm">
-                                                    PKP:{" "}
-                                                </span>
-                                                <code className="font-mono text-sm">
-                                                    {pkp.ethAddress}
-                                                </code>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center space-x-2">
+                                                    <span className="font-medium text-sm">
+                                                        PKP:
+                                                    </span>
+                                                    <code className="text-sm text-gray-600">
+                                                        {pkp.ethAddress}
+                                                    </code>
+                                                </div>
                                             </div>
+
                                             {pkp.permittedTools &&
                                                 pkp.permittedTools.length >
                                                     0 && (
-                                                    <div className="mt-2 pl-4 border-l-2 border-gray-200">
-                                                        <h4 className="text-sm font-semibold mb-1">
-                                                            Permitted Tools
-                                                            (CID):
-                                                        </h4>
+                                                    <div className="mt-2 space-y-2">
                                                         {pkp.permittedTools.map(
                                                             (
                                                                 tool: any,
                                                                 toolIndex: number
                                                             ) => (
-                                                                <button
+                                                                <div
                                                                     key={
                                                                         toolIndex
                                                                     }
-                                                                    onClick={() =>
-                                                                        router.push(
-                                                                            `/ipfs/${tool}`
-                                                                        )
-                                                                    }
-                                                                    className="w-full text-left font-mono text-sm break-all bg-gray-100 p-2 rounded mb-2 flex justify-between items-center hover:bg-gray-200"
+                                                                    className="bg-white p-2 rounded text-sm"
                                                                 >
-                                                                    {tool}
-                                                                    <span className="ml-2">
-                                                                        →
-                                                                    </span>
-                                                                </button>
+                                                                    <div className="flex items-center justify-between">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-xs text-gray-500">
+                                                                                Tool:
+                                                                            </span>
+                                                                            <div className="flex items-center">
+                                                                                <code className="text-xs text-gray-600">
+                                                                                    {
+                                                                                        tool.toolIpfsCid
+                                                                                    }
+                                                                                </code>
+                                                                                <span
+                                                                                    className={`text-xs ml-2 ${
+                                                                                        tool.toolEnabled
+                                                                                            ? "text-green-600"
+                                                                                            : "text-gray-500"
+                                                                                    }`}
+                                                                                >
+                                                                                    (
+                                                                                    {tool.toolEnabled
+                                                                                        ? "Enabled"
+                                                                                        : "Disabled"}
+
+                                                                                    )
+                                                                                </span>
+                                                                                <Button
+                                                                                    variant="ghost"
+                                                                                    size="sm"
+                                                                                    className="p-0 h-auto ml-1"
+                                                                                    onClick={() =>
+                                                                                        router.push(
+                                                                                            `/ipfs/${tool.toolIpfsCid}`
+                                                                                        )
+                                                                                    }
+                                                                                >
+                                                                                    <ArrowUpRight className="h-3 w-3" />
+                                                                                </Button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {tool.policy ? (
+                                                                        <div className="mt-1 flex items-center justify-between">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-xs text-gray-500">
+                                                                                    Policy:
+                                                                                </span>
+                                                                                <div className="flex items-center">
+                                                                                    <code className="text-xs text-gray-600">
+                                                                                        {
+                                                                                            tool
+                                                                                                .policy
+                                                                                                .policyIpfsCid
+                                                                                        }
+                                                                                    </code>
+                                                                                    <span
+                                                                                        className={`text-xs ml-2 ${
+                                                                                            tool
+                                                                                                .policy
+                                                                                                .policyEnabled
+                                                                                                ? "text-green-600"
+                                                                                                : "text-gray-500"
+                                                                                        }`}
+                                                                                    >
+                                                                                        (
+                                                                                        {tool
+                                                                                            .policy
+                                                                                            .policyEnabled
+                                                                                            ? "Enabled"
+                                                                                            : "Disabled"}
+
+                                                                                        )
+                                                                                    </span>
+                                                                                    <Button
+                                                                                        variant="ghost"
+                                                                                        size="sm"
+                                                                                        className="p-0 h-auto ml-1"
+                                                                                        onClick={() =>
+                                                                                            router.push(
+                                                                                                `/ipfs/${tool.policy.policyIpfsCid}`
+                                                                                            )
+                                                                                        }
+                                                                                    >
+                                                                                        <ArrowUpRight className="h-3 w-3" />
+                                                                                    </Button>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="mt-1">
+                                                                            <span className="text-xs text-gray-500">
+                                                                                Policy:{" "}
+                                                                            </span>
+                                                                            <span className="text-xs text-gray-600">
+                                                                                No
+                                                                                Policy
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             )
                                                         )}
                                                     </div>

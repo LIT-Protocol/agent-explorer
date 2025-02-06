@@ -24,8 +24,8 @@ const QuerySearchPage = () => {
                 </CardHeader>
                 <CardContent className="space-y-6">
                     <p className="text-gray-600 mb-6">
-                        Verify the tool permissions, policies and delegatees of any
-                        agent by entering their wallet address.
+                        Verify the tool permissions, policies and delegatees of
+                        any agent by entering their wallet address.
                     </p>
 
                     <div className="flex gap-3 mb-4">
