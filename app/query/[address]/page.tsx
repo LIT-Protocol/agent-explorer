@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 import React, { useState, useEffect } from "react";
 import { Header } from "@/app/components/Header";
@@ -11,9 +9,7 @@ import { Shield, AlertTriangle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
     listAllTools,
-    PkpToolRegistryContract,
-    getToolByIpfsCid,
-    getToolByName,
+    PkpToolRegistryContract
 } from "@lit-protocol/agent-wallet";
 import { LIT_NETWORKS_KEYS } from "@lit-protocol/types";
 
